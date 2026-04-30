@@ -2912,8 +2912,27 @@ function renderInsights(data, per){
     const produtoSetIns = produtosSelecionados.length ? new Set(produtosSelecionados) : null;
 
     const ultMes = selloutUltimoPeriodo;
-    const ultMesAtualKey = `${ultMes.ano}-${ultMes.mes}`;
-    const ultMesCompKey = `${ultMes.ano - 1}-${ultMes.mes}`;
+
+    // Sell-out: usa MESMOS MESES do filtro do dashboard, cortando para meses disponíveis em SO
+    function temNoSO_ins(p){
+      return (p.ano < ultMes.ano) || (p.ano === ultMes.ano && p.mes <= ultMes.mes);
+    }
+    let periodoSOAtualIns = per.periodoAtual.filter(temNoSO_ins);
+    let periodoSOCompIns = periodoSOAtualIns.map(p => ({ano: p.ano - 1, mes: p.mes}));
+    if(periodoSOAtualIns.length === 0){
+      periodoSOAtualIns = [{ano: ultMes.ano, mes: ultMes.mes}];
+      periodoSOCompIns = [{ano: ultMes.ano - 1, mes: ultMes.mes}];
+    }
+    const setAtualSOIns = new Set(periodoSOAtualIns.map(p => `${p.ano}-${p.mes}`));
+    const setCompSOIns = new Set(periodoSOCompIns.map(p => `${p.ano}-${p.mes}`));
+
+    // Label do período (igual aos outros cards)
+    const labelSOAtualIns = periodoSOAtualIns.length === 1
+      ? `${MESES_NOME[periodoSOAtualIns[0].mes-1]}/${periodoSOAtualIns[0].ano}`
+      : `${MESES_NOME[periodoSOAtualIns[0].mes-1]}/${periodoSOAtualIns[0].ano} a ${MESES_NOME[periodoSOAtualIns[periodoSOAtualIns.length-1].mes-1]}/${periodoSOAtualIns[periodoSOAtualIns.length-1].ano}`;
+    const labelSOCompIns = periodoSOCompIns.length === 1
+      ? `${MESES_NOME[periodoSOCompIns[0].mes-1]}/${periodoSOCompIns[0].ano}`
+      : `${MESES_NOME[periodoSOCompIns[0].mes-1]}/${periodoSOCompIns[0].ano} a ${MESES_NOME[periodoSOCompIns[periodoSOCompIns.length-1].mes-1]}/${periodoSOCompIns[periodoSOCompIns.length-1].ano}`;
 
     let soAtual = 0, soComp = 0;
     for(const r of rawDataSellout){
@@ -2922,16 +2941,15 @@ function renderInsights(data, per){
       if(produtoSetIns && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSetIns))) continue;
       const k = `${r.ANO}-${r.MES}`;
       const v = metricaAtual === 'UNID' ? (+r.UNID || 0) : (+r.BRL || 0);
-      if(k === ultMesAtualKey) soAtual += v;
-      if(k === ultMesCompKey) soComp += v;
+      if(setAtualSOIns.has(k)) soAtual += v;
+      if(setCompSOIns.has(k)) soComp += v;
     }
     const soVarPct = soComp ? ((soAtual - soComp) / soComp * 100) : (soAtual > 0 ? 100 : 0);
     const gapPct = varPct - soVarPct;
-    const mesLabel = `${MESES_NOME[ultMes.mes-1]}/${ultMes.ano}`;
 
     // Avaliar saúde do canal — prosa executiva
     if(soAtual > 0){
-      ins.push(`<b>Sell-out</b> em ${mesLabel} registrou variação de ${soVarPct >= 0 ? '+' : ''}${soVarPct.toFixed(1)}% vs ${MESES_NOME[ultMes.mes-1]}/${ultMes.ano-1} (defasagem M-2 em relação ao sell-in).`);
+      ins.push(`<b>Sell-out</b> em ${labelSOAtualIns} registrou variação de ${soVarPct >= 0 ? '+' : ''}${soVarPct.toFixed(1)}% vs ${labelSOCompIns} (M-2 em relação ao sell-in).`);
 
       // Insight cruzado
       if(varPct >= 0 && soVarPct >= 0){
@@ -5435,10 +5453,10 @@ async function exportPPTX(){
     addHeader(s3, '💡 Insights Automáticos');
     const insightsEls = document.querySelectorAll('#insightsList li');
     const insightsTxt = [...insightsEls].map(el => el.textContent.trim());
-    const insightsBullets = insightsTxt.slice(0, 18).map(t => ({text: t, options:{bullet:true, fontSize:13, color:'451A03', paraSpaceAfter:8}}));
+    const insightsBullets = insightsTxt.slice(0, 18).map(t => ({text: t, options:{bullet:true, fontSize:13, color:'1E3A5F', paraSpaceAfter:8}}));
     s3.addText(insightsBullets, {
       x:0.5, y:1.0, w:12.3, h:5.8,
-      fill:{color:'FEF3C7'}, valign:'top', margin:18
+      fill:{color:'EBF4FB'}, valign:'top', margin:18, line:{color:'003595', width:1}
     });
 
     // ============================================================
