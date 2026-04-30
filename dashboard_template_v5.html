@@ -61,6 +61,18 @@
   .metric-btn.active{background:var(--alcon-blue);color:#fff;box-shadow:0 2px 6px rgba(0,121,193,0.3);border-color:var(--alcon-blue);}
   .metric-btn .metric-icon{font-size:16px}
 
+  /* Metric toggle compacto na toolbar */
+  .metric-toggle-compact{
+    display:inline-flex;gap:4px;padding:0;margin-right:8px;
+    background:#f0f7fc;border-radius:8px;padding:3px;border:1px solid #d1e0ed;
+  }
+  .metric-toggle-compact .metric-btn{
+    padding:5px 10px;font-size:11px;border:none;background:transparent;border-radius:6px;
+  }
+  .metric-toggle-compact .metric-btn:hover{background:#e0ecf5}
+  .metric-toggle-compact .metric-btn.active{background:var(--alcon-blue);color:#fff;box-shadow:0 1px 3px rgba(0,121,193,0.4);}
+  .metric-toggle-compact .metric-btn .metric-icon{font-size:13px}
+
   .filters{background:#ffffff;padding:18px;border-radius:12px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.05);display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;}
   /* Cliente ocupa o dobro de espaço (mais caracteres) */
   .filter-group-wide{grid-column:span 2;min-width:320px;}
@@ -308,10 +320,10 @@
   .rank{display:inline-block;width:24px;height:24px;line-height:24px;text-align:center;background:var(--alcon-blue);color:#fff;border-radius:50%;font-weight:700;font-size:11px;}
   .rank.top3{background:var(--alcon-purple)}
   .table-wrap{max-height:520px;overflow:auto;border:1px solid var(--border);border-radius:8px}
-  .insights{background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%);padding:18px;border-radius:12px;border-left:4px solid #f59e0b;margin-bottom:20px;}
-  .insights h3{color:#92400e;margin:0 0 10px;font-size:14px}
-  .insights h3::before{background:#f59e0b}
-  .insights ul{margin:0;padding-left:20px;color:#451a03;line-height:1.7}
+  .insights{background:linear-gradient(135deg,#EBF4FB 0%,#D1E5F4 100%);padding:18px;border-radius:12px;border-left:4px solid var(--alcon-blue);margin-bottom:20px;}
+  .insights h3{color:var(--alcon-blue-dark);margin:0 0 10px;font-size:14px}
+  .insights h3::before{background:var(--alcon-blue)}
+  .insights ul{margin:0;padding-left:20px;color:#1e3a5f;line-height:1.7}
   .tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid var(--border);overflow-x:auto;background:#fff;padding:4px 4px 0;border-radius:12px 12px 0 0;box-shadow:0 1px 3px rgba(0,0,0,0.05);}
 
   /* TOGGLE SELL-IN / SELL-OUT dentro das abas */
@@ -509,19 +521,6 @@
 
 <div class="container">
 
-  <!-- TOGGLE DE MÉTRICA GLOBAL -->
-  <div class="metric-bar">
-    <span class="metric-bar-label">📊 Métrica de Análise:</span>
-    <div class="metric-toggle" id="metricToggle">
-      <button class="metric-btn active" data-metric="UNID"><span class="metric-icon">📦</span>Unidades</button>
-      <button class="metric-btn" data-metric="BRL"><span class="metric-icon">💰</span>Reais (R$)</button>
-      <button class="metric-btn" data-metric="USD"><span class="metric-icon">💵</span>Dólares (US$)</button>
-    </div>
-    <span style="color:var(--ink-muted);font-size:11px;margin-left:auto" id="metricHint">
-      Troca todas as análises. KPIs, gráficos, tabelas e benchmark.
-    </span>
-  </div>
-
   <div class="filters-wrapper collapsible collapsed" id="filtersCard">
     <h3 onclick="toggleSection('filtersCard')" style="margin:0 0 8px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:8px;color:var(--alcon-blue);font-weight:700;">
       🔍 Filtros <span id="filtersIndicator" style="font-size:11px;color:var(--ink-muted);font-weight:500"></span>
@@ -625,6 +624,11 @@
   </div>
 
   <div class="toolbar">
+    <div class="metric-toggle metric-toggle-compact" id="metricToggle" title="Métrica global - troca todas análises">
+      <button class="metric-btn active" data-metric="UNID" title="Unidades"><span class="metric-icon">📦</span>UNID</button>
+      <button class="metric-btn" data-metric="BRL" title="Reais"><span class="metric-icon">💰</span>BRL</button>
+      <button class="metric-btn" data-metric="USD" title="Dólares"><span class="metric-icon">💵</span>USD</button>
+    </div>
     <button class="btn btn-outline" onclick="resetFilters()">🔄 Limpar Filtros</button>
     <button class="btn btn-outline" onclick="expandirTodos()" title="Reabre todos os cards e limpa preferências salvas">🔽 Expandir Todos</button>
     <button class="btn btn-outline" onclick="exportInsights()">📥 Exportar Insights</button>
@@ -822,12 +826,12 @@
     </div>
     <div class="grid-2">
       <div class="card collapsible" id="quedaClientesCard">
-        <h3 onclick="toggleSection('quedaClientesCard')">⚠️ Top 15 Clientes com Maior Queda <span style="font-size:11px;font-weight:300;color:var(--ink-muted);margin-left:auto">(fat. ≥ R$ 100k)</span> <span class="toggle-icon">▼</span></h3>
-        <div class="collapsible-body"><div class="table-wrap"><table id="tabelaQuedaClientes"><thead><tr><th>#</th><th>Cliente</th><th class="num">Atual</th><th class="num">Δ %</th></tr></thead><tbody></tbody></table></div></div>
+        <h3 onclick="toggleSection('quedaClientesCard')">⚠️ Top 15 Clientes com Maior Queda <span style="font-size:11px;font-weight:300;color:var(--ink-muted);margin-left:auto">(ordenado por peso na queda total)</span> <span class="toggle-icon">▼</span></h3>
+        <div class="collapsible-body"><div class="table-wrap"><table id="tabelaQuedaClientes"><thead><tr><th>#</th><th>Cliente</th><th class="num">Atual</th><th class="num" title="Variação absoluta">Δ Abs</th><th class="num" title="Variação percentual">Δ %</th><th class="num" title="% que este item representa da queda total">Peso</th></tr></thead><tbody></tbody></table></div></div>
       </div>
       <div class="card collapsible" id="quedaProdutosCard">
-        <h3 onclick="toggleSection('quedaProdutosCard')">⚠️ Top 15 Produtos com Maior Queda <span style="font-size:11px;font-weight:300;color:var(--ink-muted);margin-left:auto">(fat. ≥ R$ 100k)</span> <span class="toggle-icon">▼</span></h3>
-        <div class="collapsible-body"><div class="table-wrap"><table id="tabelaQuedaProdutos"><thead><tr><th>#</th><th>Produto</th><th class="num">Atual</th><th class="num">Δ %</th></tr></thead><tbody></tbody></table></div></div>
+        <h3 onclick="toggleSection('quedaProdutosCard')">⚠️ Top 15 Produtos com Maior Queda <span style="font-size:11px;font-weight:300;color:var(--ink-muted);margin-left:auto">(ordenado por peso na queda total)</span> <span class="toggle-icon">▼</span></h3>
+        <div class="collapsible-body"><div class="table-wrap"><table id="tabelaQuedaProdutos"><thead><tr><th>#</th><th>Produto</th><th class="num">Atual</th><th class="num" title="Variação absoluta">Δ Abs</th><th class="num" title="Variação percentual">Δ %</th><th class="num" title="% que este item representa da queda total">Peso</th></tr></thead><tbody></tbody></table></div></div>
       </div>
     </div>
   </div>
@@ -4174,6 +4178,33 @@ function renderCrescimento(data, per){
 function renderQueda(data, per){
   const THRESHOLD_BRL = 100000;
 
+  // Helper: calcular peso e gerar HTML da tabela ordenada por contribuição absoluta
+  function ordenarPorPesoEFormatar(linhas){
+    // Ordena por dAbs (mais negativo primeiro = maior queda absoluta)
+    const ordenadas = linhas.sort((a,b) => a.dAbs - b.dAbs);
+    // Top 15
+    const top15 = ordenadas.slice(0,15);
+    // Calcula queda total (soma absoluta dos dAbs negativos do TOP 15) pra base do peso
+    const quedaTotal = top15.reduce((sum, r) => sum + Math.abs(r.dAbs), 0);
+    return top15.map((r, i) => {
+      const peso = quedaTotal > 0 ? (Math.abs(r.dAbs) / quedaTotal * 100) : 0;
+      return {...r, peso, rank: i+1};
+    });
+  }
+
+  function renderTabelaQueda(sel, arr){
+    document.querySelector(sel).innerHTML = arr.map(r =>
+      `<tr>
+        <td><span class="rank">${r.rank}</span></td>
+        <td><b>${r.nome}</b></td>
+        <td class="num">${fmt(r.atual)}</td>
+        <td class="num"><b style="color:var(--alcon-red)">-${fmt(Math.abs(r.dAbs))}</b></td>
+        <td class="num"><span class="variation neg">▼ -${Math.abs(r.dPct).toFixed(1)}%</span></td>
+        <td class="num"><b style="color:var(--alcon-blue)">${r.peso.toFixed(1)}%</b></td>
+      </tr>`
+    ).join('');
+  }
+
   if(fonteQueda === 'SO' && rawDataSellout && rawDataSellout.length > 0 && selloutUltimoPeriodo){
     document.getElementById('quedaAvisoSO').style.display = 'inline-block';
     document.getElementById('quedaAvisoSO').innerHTML = `<span class="fonte-aviso">🛒 Sell-out · ${MESES_NOME[selloutUltimoPeriodo.mes-1]}/${selloutUltimoPeriodo.ano} · M-2 · ≥50 unid</span>`;
@@ -4182,17 +4213,13 @@ function renderQueda(data, per){
     const aggP = agregarSellout('PRODUTO') || {};
     // Filtro de relevância SO: 50 unidades mínimo no comp (filtra ruído estatístico tipo 1→0)
     const THRESHOLD_UNID_SO = 50;
-    const lC = Object.keys(aggC).map(k => ({nome:k, atual:aggC[k].atual, brlAtual:aggC[k].brlAtual, unidComp:aggC[k].unidComp||0, dPct:aggC[k].comp?((aggC[k].atual-aggC[k].comp)/aggC[k].comp*100):0}))
-      .filter(r => r.atual > 0 && r.unidComp >= THRESHOLD_UNID_SO && r.dPct < 0);
-    const lP = Object.keys(aggP).map(k => ({nome:k, atual:aggP[k].atual, brlAtual:aggP[k].brlAtual, unidComp:aggP[k].unidComp||0, dPct:aggP[k].comp?((aggP[k].atual-aggP[k].comp)/aggP[k].comp*100):0}))
-      .filter(r => r.atual > 0 && r.unidComp >= THRESHOLD_UNID_SO && r.dPct < 0);
+    const lC = Object.keys(aggC).map(k => ({nome:k, atual:aggC[k].atual, comp:aggC[k].comp, brlAtual:aggC[k].brlAtual, unidComp:aggC[k].unidComp||0, dAbs:aggC[k].atual-aggC[k].comp, dPct:aggC[k].comp?((aggC[k].atual-aggC[k].comp)/aggC[k].comp*100):0}))
+      .filter(r => r.atual > 0 && r.unidComp >= THRESHOLD_UNID_SO && r.dAbs < 0);
+    const lP = Object.keys(aggP).map(k => ({nome:k, atual:aggP[k].atual, comp:aggP[k].comp, brlAtual:aggP[k].brlAtual, unidComp:aggP[k].unidComp||0, dAbs:aggP[k].atual-aggP[k].comp, dPct:aggP[k].comp?((aggP[k].atual-aggP[k].comp)/aggP[k].comp*100):0}))
+      .filter(r => r.atual > 0 && r.unidComp >= THRESHOLD_UNID_SO && r.dAbs < 0);
 
-    const tbl = (sel, arr) => document.querySelector(sel).innerHTML =
-      arr.map((r,i)=>`<tr><td><span class="rank">${i+1}</span></td><td><b>${r.nome}</b></td>
-      <td class="num">${fmt(r.atual)}</td>
-      <td class="num"><span class="variation neg">▼ -${Math.abs(r.dPct).toFixed(1)}%</span></td></tr>`).join('');
-    tbl('#tabelaQuedaClientes tbody', [...lC].sort((a,b)=>a.dPct-b.dPct).slice(0,15));
-    tbl('#tabelaQuedaProdutos tbody', [...lP].sort((a,b)=>a.dPct-b.dPct).slice(0,15));
+    renderTabelaQueda('#tabelaQuedaClientes tbody', ordenarPorPesoEFormatar(lC));
+    renderTabelaQueda('#tabelaQuedaProdutos tbody', ordenarPorPesoEFormatar(lP));
     return;
   }
 
@@ -4214,17 +4241,14 @@ function renderQueda(data, per){
     return Object.keys(atual).map(k=>{
       const a = atual[k].valor, cp = comp[k]?.valor || 0;
       const brlAtual = brlPorChave[groupBy][k] || 0;
-      return {nome:k, atual:a, brlAtual, dPct: cp?((a-cp)/cp*100):(a>0?100:0)};
+      return {nome:k, atual:a, comp:cp, brlAtual, dAbs:a-cp, dPct: cp?((a-cp)/cp*100):(a>0?100:0)};
     }).filter(r => r.atual > 0);
   };
-  const lC = fazLinhasComBRL(COLS.CLIENTE).filter(r => r.brlAtual >= THRESHOLD_BRL);
-  const lP = fazLinhasComBRL(COLS.PRODUTO).filter(r => r.brlAtual >= THRESHOLD_BRL);
-  const tbl = (sel, arr) => document.querySelector(sel).innerHTML =
-    arr.map((r,i)=>`<tr><td><span class="rank">${i+1}</span></td><td><b>${r.nome}</b></td>
-    <td class="num">${fmt(r.atual)}</td>
-    <td class="num"><span class="variation neg">▼ -${Math.abs(r.dPct).toFixed(1)}%</span></td></tr>`).join('');
-  tbl('#tabelaQuedaClientes tbody', [...lC].filter(r => r.dPct < 0).sort((a,b)=>a.dPct-b.dPct).slice(0,15));
-  tbl('#tabelaQuedaProdutos tbody', [...lP].filter(r => r.dPct < 0).sort((a,b)=>a.dPct-b.dPct).slice(0,15));
+  const lC = fazLinhasComBRL(COLS.CLIENTE).filter(r => r.brlAtual >= THRESHOLD_BRL && r.dAbs < 0);
+  const lP = fazLinhasComBRL(COLS.PRODUTO).filter(r => r.brlAtual >= THRESHOLD_BRL && r.dAbs < 0);
+
+  renderTabelaQueda('#tabelaQuedaClientes tbody', ordenarPorPesoEFormatar(lC));
+  renderTabelaQueda('#tabelaQuedaProdutos tbody', ordenarPorPesoEFormatar(lP));
 }
 
 // ============================================================
@@ -4237,10 +4261,19 @@ function renderDiagnosticoCresce(data, per){
     const aggC = agregarSellout('GRUPO_PAINEL') || {};
     const aggP = agregarSellout('PRODUTO') || {};
 
-    const cresceClientes = Object.keys(aggC).map(k => ({nome:k, atual:aggC[k].atual, unidComp:aggC[k].unidComp||0, dPct:aggC[k].comp?((aggC[k].atual-aggC[k].comp)/aggC[k].comp*100):0}))
-      .filter(r => r.atual > 0 && r.dPct > 0 && r.unidComp >= 50).sort((a,b)=>b.dPct-a.dPct).slice(0,5);
-    const cresceProdutos = Object.keys(aggP).map(k => ({nome:k, atual:aggP[k].atual, unidComp:aggP[k].unidComp||0, dPct:aggP[k].comp?((aggP[k].atual-aggP[k].comp)/aggP[k].comp*100):0}))
-      .filter(r => r.atual > 0 && r.dPct > 0 && r.unidComp >= 50).sort((a,b)=>b.dPct-a.dPct).slice(0,5);
+    // Mapear com dAbs (variação absoluta) - filtro de 50 unid no comp
+    const cresceClientes = Object.keys(aggC).map(k => ({nome:k, atual:aggC[k].atual, comp:aggC[k].comp, unidComp:aggC[k].unidComp||0, dAbs:aggC[k].atual-aggC[k].comp, dPct:aggC[k].comp?((aggC[k].atual-aggC[k].comp)/aggC[k].comp*100):0}))
+      .filter(r => r.atual > 0 && r.dAbs > 0 && r.unidComp >= 50)
+      .sort((a,b) => b.dAbs - a.dAbs).slice(0,5);
+    const cresceProdutos = Object.keys(aggP).map(k => ({nome:k, atual:aggP[k].atual, comp:aggP[k].comp, unidComp:aggP[k].unidComp||0, dAbs:aggP[k].atual-aggP[k].comp, dPct:aggP[k].comp?((aggP[k].atual-aggP[k].comp)/aggP[k].comp*100):0}))
+      .filter(r => r.atual > 0 && r.dAbs > 0 && r.unidComp >= 50)
+      .sort((a,b) => b.dAbs - a.dAbs).slice(0,5);
+
+    // Calcular peso% (contribuição na variação total do top 5)
+    const totalCresceCli = cresceClientes.reduce((s,r) => s + r.dAbs, 0);
+    const totalCresceProd = cresceProdutos.reduce((s,r) => s + r.dAbs, 0);
+    cresceClientes.forEach(r => r.peso = totalCresceCli ? (r.dAbs/totalCresceCli*100) : 0);
+    cresceProdutos.forEach(r => r.peso = totalCresceProd ? (r.dAbs/totalCresceProd*100) : 0);
 
     if(cresceClientes.length === 0 && cresceProdutos.length === 0){
       conteudo.innerHTML = '<div style="padding:14px;color:#94a3b8;font-style:italic">Nenhum crescimento relevante em sell-out neste período.</div>';
@@ -4250,14 +4283,14 @@ function renderDiagnosticoCresce(data, per){
     let html = '';
     if(cresceClientes.length > 0){
       html += `<div class="diagnostico-bloco" style="border-left:4px solid var(--alcon-green)">
-        <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--alcon-green)">🚀 Top Redes em Crescimento (SO)</div>
-        ${cresceClientes.map(r => `<div style="font-size:12px;margin:4px 0">• <b>${r.nome}</b>: ${fmt(r.atual)} (▲ +${r.dPct.toFixed(1)}%)</div>`).join('')}
+        <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--alcon-green)">🚀 Top Redes em Crescimento (SO) · ordenado por peso</div>
+        ${cresceClientes.map(r => `<div style="font-size:12px;margin:4px 0">• <b>${r.nome}</b>: +${fmt(r.dAbs)} (▲ +${r.dPct.toFixed(1)}%) · <span style="color:var(--alcon-blue);font-weight:700">${r.peso.toFixed(0)}% do crescimento</span></div>`).join('')}
       </div>`;
     }
     if(cresceProdutos.length > 0){
       html += `<div class="diagnostico-bloco" style="border-left:4px solid var(--alcon-green)">
-        <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--alcon-green)">🚀 Top Produtos em Crescimento (SO)</div>
-        ${cresceProdutos.map(r => `<div style="font-size:12px;margin:4px 0">• <b>${r.nome}</b>: ${fmt(r.atual)} (▲ +${r.dPct.toFixed(1)}%)</div>`).join('')}
+        <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--alcon-green)">🚀 Top Produtos em Crescimento (SO) · ordenado por peso</div>
+        ${cresceProdutos.map(r => `<div style="font-size:12px;margin:4px 0">• <b>${r.nome}</b>: +${fmt(r.dAbs)} (▲ +${r.dPct.toFixed(1)}%) · <span style="color:var(--alcon-blue);font-weight:700">${r.peso.toFixed(0)}% do crescimento</span></div>`).join('')}
       </div>`;
     }
     conteudo.innerHTML = html;
@@ -4274,10 +4307,19 @@ function renderDiagnosticoQueda(data, per){
     const aggC = agregarSellout('GRUPO_PAINEL') || {};
     const aggP = agregarSellout('PRODUTO') || {};
 
-    const quedaClientes = Object.keys(aggC).map(k => ({nome:k, atual:aggC[k].atual, unidComp:aggC[k].unidComp||0, dPct:aggC[k].comp?((aggC[k].atual-aggC[k].comp)/aggC[k].comp*100):0}))
-      .filter(r => r.atual > 0 && r.dPct < 0 && r.unidComp >= 50).sort((a,b)=>a.dPct-b.dPct).slice(0,5);
-    const quedaProdutos = Object.keys(aggP).map(k => ({nome:k, atual:aggP[k].atual, unidComp:aggP[k].unidComp||0, dPct:aggP[k].comp?((aggP[k].atual-aggP[k].comp)/aggP[k].comp*100):0}))
-      .filter(r => r.atual > 0 && r.dPct < 0 && r.unidComp >= 50).sort((a,b)=>a.dPct-b.dPct).slice(0,5);
+    // Mapear com dAbs - filtro 50 unid no comp pra evitar 1→0 = -100% irrelevante
+    const quedaClientes = Object.keys(aggC).map(k => ({nome:k, atual:aggC[k].atual, comp:aggC[k].comp, unidComp:aggC[k].unidComp||0, dAbs:aggC[k].atual-aggC[k].comp, dPct:aggC[k].comp?((aggC[k].atual-aggC[k].comp)/aggC[k].comp*100):0}))
+      .filter(r => r.atual >= 0 && r.dAbs < 0 && r.unidComp >= 50)
+      .sort((a,b) => a.dAbs - b.dAbs).slice(0,5);
+    const quedaProdutos = Object.keys(aggP).map(k => ({nome:k, atual:aggP[k].atual, comp:aggP[k].comp, unidComp:aggP[k].unidComp||0, dAbs:aggP[k].atual-aggP[k].comp, dPct:aggP[k].comp?((aggP[k].atual-aggP[k].comp)/aggP[k].comp*100):0}))
+      .filter(r => r.atual >= 0 && r.dAbs < 0 && r.unidComp >= 50)
+      .sort((a,b) => a.dAbs - b.dAbs).slice(0,5);
+
+    // Calcular peso% (contribuição absoluta na queda total do top 5)
+    const totalQuedaCli = quedaClientes.reduce((s,r) => s + Math.abs(r.dAbs), 0);
+    const totalQuedaProd = quedaProdutos.reduce((s,r) => s + Math.abs(r.dAbs), 0);
+    quedaClientes.forEach(r => r.peso = totalQuedaCli ? (Math.abs(r.dAbs)/totalQuedaCli*100) : 0);
+    quedaProdutos.forEach(r => r.peso = totalQuedaProd ? (Math.abs(r.dAbs)/totalQuedaProd*100) : 0);
 
     if(quedaClientes.length === 0 && quedaProdutos.length === 0){
       conteudo.innerHTML = '<div style="padding:14px;color:#94a3b8;font-style:italic">Nenhuma queda relevante em sell-out neste período.</div>';
@@ -4287,14 +4329,14 @@ function renderDiagnosticoQueda(data, per){
     let html = '';
     if(quedaClientes.length > 0){
       html += `<div class="diagnostico-bloco" style="border-left:4px solid var(--alcon-red)">
-        <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--alcon-red)">📉 Top Redes em Queda (SO)</div>
-        ${quedaClientes.map(r => `<div style="font-size:12px;margin:4px 0">• <b>${r.nome}</b>: ${fmt(r.atual)} (▼ ${r.dPct.toFixed(1)}%)</div>`).join('')}
+        <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--alcon-red)">📉 Top Redes em Queda (SO) · ordenado por peso</div>
+        ${quedaClientes.map(r => `<div style="font-size:12px;margin:4px 0">• <b>${r.nome}</b>: -${fmt(Math.abs(r.dAbs))} (▼ ${r.dPct.toFixed(1)}%) · <span style="color:var(--alcon-blue);font-weight:700">${r.peso.toFixed(0)}% da queda</span></div>`).join('')}
       </div>`;
     }
     if(quedaProdutos.length > 0){
       html += `<div class="diagnostico-bloco" style="border-left:4px solid var(--alcon-red)">
-        <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--alcon-red)">📉 Top Produtos em Queda (SO)</div>
-        ${quedaProdutos.map(r => `<div style="font-size:12px;margin:4px 0">• <b>${r.nome}</b>: ${fmt(r.atual)} (▼ ${r.dPct.toFixed(1)}%)</div>`).join('')}
+        <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--alcon-red)">📉 Top Produtos em Queda (SO) · ordenado por peso</div>
+        ${quedaProdutos.map(r => `<div style="font-size:12px;margin:4px 0">• <b>${r.nome}</b>: -${fmt(Math.abs(r.dAbs))} (▼ ${r.dPct.toFixed(1)}%) · <span style="color:var(--alcon-blue);font-weight:700">${r.peso.toFixed(0)}% da queda</span></div>`).join('')}
       </div>`;
     }
     conteudo.innerHTML = html;
@@ -4732,44 +4774,67 @@ async function exportPPTX(){
       const tipoSetSO = tiposClienteSelecionados.length ? new Set(tiposClienteSelecionados) : null;
       const produtoSetSO = produtosSelecionados.length ? new Set(produtosSelecionados) : null;
       const ultMes = selloutUltimoPeriodo;
-      const kAtual = `${ultMes.ano}-${ultMes.mes}`;
-      const kComp = `${ultMes.ano - 1}-${ultMes.mes}`;
+
+      // Sell-out: respeita o filtro do dashboard (igual aos outros cards)
+      // periodoAtual filtrado para meses disponíveis em SO; comp = atual deslocado 1 ano
+      function temNoSO_kpi(p){
+        return (p.ano < ultMes.ano) || (p.ano === ultMes.ano && p.mes <= ultMes.mes);
+      }
+      let periodoSOAtualKpi = per.periodoAtual.filter(temNoSO_kpi);
+      let periodoSOCompKpi = periodoSOAtualKpi.map(p => ({ano: p.ano - 1, mes: p.mes}));
+      if(periodoSOAtualKpi.length === 0){
+        periodoSOAtualKpi = [{ano: ultMes.ano, mes: ultMes.mes}];
+        periodoSOCompKpi = [{ano: ultMes.ano - 1, mes: ultMes.mes}];
+      }
+      const setAtualSOKpi = new Set(periodoSOAtualKpi.map(p => `${p.ano}-${p.mes}`));
+      const setCompSOKpi = new Set(periodoSOCompKpi.map(p => `${p.ano}-${p.mes}`));
+
+      // MoM e YTD continuam usando último mês disponível em SO (são conceitos diferentes do filtro)
       const mesAntFinal = ultMes.mes === 1 ? {ano: ultMes.ano - 1, mes: 12} : {ano: ultMes.ano, mes: ultMes.mes - 1};
       const kMom = `${mesAntFinal.ano}-${mesAntFinal.mes}`;
+      const kAtualMom = `${ultMes.ano}-${ultMes.mes}`;
       const ytdK = new Set(), ytdAntK = new Set();
       for(let mm = 1; mm <= ultMes.mes; mm++){
         ytdK.add(`${ultMes.ano}-${mm}`);
         ytdAntK.add(`${ultMes.ano - 1}-${mm}`);
       }
-      let atual=0, comp=0, mom=0, ytd=0, ytdAnt=0;
+      let atual=0, comp=0, momAtual=0, momAnterior=0, ytd=0, ytdAnt=0;
       for(const r of rawDataSellout){
         if(franquiasSetSO && !franquiasSetSO.has(String(r.FRANQUIA))) continue;
         if(tipoSetSO && !tipoSetSO.has(r.TIPO_CLIENTE)) continue;
         if(produtoSetSO && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSetSO))) continue;
         const k = `${r.ANO}-${r.MES}`;
         const v = metricaAtual === 'UNID' ? (+r.UNID || 0) : (+r.BRL || 0);
-        if(k === kAtual) atual += v;
-        if(k === kComp) comp += v;
-        if(k === kMom) mom += v;
+        if(setAtualSOKpi.has(k)) atual += v;     // <<< respeita filtro
+        if(setCompSOKpi.has(k)) comp += v;       // <<< respeita filtro
+        if(k === kAtualMom) momAtual += v;
+        if(k === kMom) momAnterior += v;
         if(ytdK.has(k)) ytd += v;
         if(ytdAntK.has(k)) ytdAnt += v;
       }
+      // Label do período SO atual (pode ser "Ago/25 a Jan/26" se filtro foi cortado)
+      const labelSOAtualKpi = periodoSOAtualKpi.length === 1
+        ? `${MESES_NOME[periodoSOAtualKpi[0].mes-1]}/${periodoSOAtualKpi[0].ano}`
+        : `${MESES_NOME[periodoSOAtualKpi[0].mes-1]}/${periodoSOAtualKpi[0].ano} a ${MESES_NOME[periodoSOAtualKpi[periodoSOAtualKpi.length-1].mes-1]}/${periodoSOAtualKpi[periodoSOAtualKpi.length-1].ano}`;
+      const labelSOCompKpi = periodoSOCompKpi.length === 1
+        ? `${MESES_NOME[periodoSOCompKpi[0].mes-1]}/${periodoSOCompKpi[0].ano}`
+        : `${MESES_NOME[periodoSOCompKpi[0].mes-1]}/${periodoSOCompKpi[0].ano} a ${MESES_NOME[periodoSOCompKpi[periodoSOCompKpi.length-1].mes-1]}/${periodoSOCompKpi[periodoSOCompKpi.length-1].ano}`;
       soKpi = {
-        atual, comp, mom, ytd, ytdAnt,
+        atual, comp, mom: momAnterior, momAtual, ytd, ytdAnt,
         varPct: comp ? ((atual-comp)/comp*100) : (atual>0?100:0),
-        momPct: mom ? ((atual-mom)/mom*100) : 0,
+        momPct: momAnterior ? ((momAtual-momAnterior)/momAnterior*100) : 0,
         ytdPct: ytdAnt ? ((ytd-ytdAnt)/ytdAnt*100) : 0,
-        ultMes, mesAntFinal
+        ultMes, mesAntFinal, labelSOAtualKpi, labelSOCompKpi
       };
     }
 
     const kpis = [
       {label:per.labelAtual, valor:fmt(totalAtual), sub:mLabel, cor:AZUL,
-       so: soKpi ? {label:`Sell-out · ${MESES_NOME[soKpi.ultMes.mes-1]}/${soKpi.ultMes.ano} ⚠️ M-2`, valor:fmt(soKpi.atual), varPct:soKpi.varPct} : null},
+       so: soKpi ? {label:`Sell-out · ${soKpi.labelSOAtualKpi} (M-2)`, valor:fmt(soKpi.atual), varPct:soKpi.varPct} : null},
       {label:`vs ${per.labelComp}`, valor:`${varPct>=0?'+':'-'}${Math.abs(varPct).toFixed(1)}%`, sub:`Δ ${varAbs>=0?'+':'-'}${fmt(Math.abs(varAbs))}`, cor: varPct>=0?VERDE:VERMELHO,
-       so: soKpi ? {label:`Sell-out · vs ${MESES_NOME[soKpi.ultMes.mes-1]}/${soKpi.ultMes.ano-1}`, valor:`${soKpi.varPct>=0?'+':'-'}${Math.abs(soKpi.varPct).toFixed(1)}%`, varPct:soKpi.varPct} : null},
+       so: soKpi ? {label:`Sell-out · vs ${soKpi.labelSOCompKpi}`, valor:`${soKpi.varPct>=0?'+':'-'}${Math.abs(soKpi.varPct).toFixed(1)}%`, varPct:soKpi.varPct} : null},
       {label:`MoM ${MESES_NOME[mesMax-1]}`, valor:`${momPct>=0?'+':'-'}${Math.abs(momPct).toFixed(1)}%`, sub:`vs ${MESES_NOME[mesAnt.mes-1]}`, cor:momPct>=0?VERDE:VERMELHO,
-       so: soKpi ? {label:`Sell-out · MoM`, valor:`${soKpi.momPct>=0?'+':'-'}${Math.abs(soKpi.momPct).toFixed(1)}%`, varPct:soKpi.momPct} : null},
+       so: soKpi ? {label:`Sell-out · MoM ${MESES_NOME[soKpi.ultMes.mes-1]}`, valor:`${soKpi.momPct>=0?'+':'-'}${Math.abs(soKpi.momPct).toFixed(1)}%`, varPct:soKpi.momPct} : null},
       {label:`YTD ${per.ano} vs ${per.ano-1}`, valor:`${ytdPct>=0?'+':'-'}${Math.abs(ytdPct).toFixed(1)}%`, sub:fmt(ytdVal), cor:ytdPct>=0?VERDE:VERMELHO,
        so: soKpi ? {label:`Sell-out · YTD ${soKpi.ultMes.ano}`, valor:`${soKpi.ytdPct>=0?'+':'-'}${Math.abs(soKpi.ytdPct).toFixed(1)}%`, varPct:soKpi.ytdPct} : null}
     ];
@@ -5918,17 +5983,18 @@ async function exportPPTX(){
         x:0.3, y:1.2, w:6.3, h:0.5, fontSize:11, italic:true, color:CINZA, fill:{color:'F8FAFC'}, valign:'middle', margin:8
       });
     } else {
-      // Top 3 produtos com cruzamento de clientes (compacto)
+      // Top 3 produtos com cruzamento de clientes (compacto) + peso na contribuição
       const top3P = cresceProds.slice(0, 3);
       const blocosTop3 = [{text:'Top 3 produtos · clientes que puxam', options:{fontSize:10, bold:true, color:AZUL, breakLine:true}}];
       top3P.forEach((p, idx) => {
+        const pesoP = totalCrescAbs ? (p.dAbs / totalCrescAbs * 100) : 0;
         const clientesDoProd = cruzamentoPpt[p.nome] ? Object.entries(cruzamentoPpt[p.nome])
           .map(([c, v]) => ({nome:c, atual:v.atual, comp:v.comp, dAbs:v.atual-v.comp, dPct: v.comp?((v.atual-v.comp)/v.comp*100):0}))
           .filter(c => c.dAbs > 0 && (totaisCliPpt[c.nome]?.brlAtual || 0) >= THRESHOLD_BRL)
           .sort((a,b) => b.dAbs - a.dAbs)
           .slice(0, 3) : [];
         blocosTop3.push({text:`${idx+1}. ${p.nome}`, options:{fontSize:10, bold:true, color:'1f2937', breakLine:true}});
-        blocosTop3.push({text:`+${fmt(p.dAbs)} (+${p.dPct.toFixed(1)}%)`, options:{fontSize:9, color:VERDE, bold:true, breakLine:true}});
+        blocosTop3.push({text:`+${fmt(p.dAbs)} (+${p.dPct.toFixed(1)}%) · ${pesoP.toFixed(0)}% do crescimento`, options:{fontSize:9, color:VERDE, bold:true, breakLine:true}});
         clientesDoProd.forEach(c => {
           blocosTop3.push({text:`   • ${c.nome}: +${fmt(c.dAbs)} (+${c.dPct.toFixed(1)}%)`, options:{fontSize:8, color:'334155', breakLine:true}});
         });
@@ -5970,13 +6036,14 @@ async function exportPPTX(){
         const top3PSO = cresceProdSOdiag.slice(0, 3);
         const blocosTop3SO = [{text:'Top 3 produtos · redes que puxam', options:{fontSize:10, bold:true, color:'1E40AF', breakLine:true}}];
         top3PSO.forEach((p, idx) => {
+          const pesoPSO = totalCrescSOAbs ? (p.dAbs / totalCrescSOAbs * 100) : 0;
           const redesDoProd = cruzamentoSOPpt[p.nome] ? Object.entries(cruzamentoSOPpt[p.nome])
             .map(([c, v]) => ({nome:c, atual:v.atual, comp:v.comp, dAbs:v.atual-v.comp, dPct: v.comp?((v.atual-v.comp)/v.comp*100):0, unidComp: v.unidComp || 0}))
             .filter(c => c.dAbs > 0 && c.unidComp >= 50)  // mínimo 50 unid no comp
             .sort((a,b) => b.dAbs - a.dAbs)
             .slice(0, 3) : [];
           blocosTop3SO.push({text:`${idx+1}. ${p.nome}`, options:{fontSize:10, bold:true, color:'1f2937', breakLine:true}});
-          blocosTop3SO.push({text:`+${fmt(p.dAbs)} (+${p.dPct.toFixed(1)}%)`, options:{fontSize:9, color:VERDE, bold:true, breakLine:true}});
+          blocosTop3SO.push({text:`+${fmt(p.dAbs)} (+${p.dPct.toFixed(1)}%) · ${pesoPSO.toFixed(0)}% do crescimento`, options:{fontSize:9, color:VERDE, bold:true, breakLine:true}});
           redesDoProd.forEach(c => {
             blocosTop3SO.push({text:`   • ${c.nome}: +${fmt(c.dAbs)} (+${c.dPct.toFixed(1)}%)`, options:{fontSize:8, color:'334155', breakLine:true}});
           });
@@ -6016,10 +6083,20 @@ async function exportPPTX(){
     const sTQ = pptx.addSlide();
     addHeader(sTQ, 'Top 15 Maiores Quedas · Sell-in × Sell-out');
 
-    const tabelaQuedaProds = produtosRelev.filter(p => p.dAbs < 0).sort((a,b) => a.dPct - b.dPct).slice(0, 15);
-    const tabelaQuedaClis = clientesRelev.filter(c => c.dAbs < 0).sort((a,b) => a.dPct - b.dPct).slice(0, 15);
-    const quedaProdSO = temSOSlide ? produtosSOPpt.filter(p => p.dAbs < 0).sort((a,b) => a.dPct - b.dPct).slice(0, 15) : [];
-    const quedaCliSO = temSOSlide ? clientesSOPpt.filter(c => c.dAbs < 0).sort((a,b) => a.dPct - b.dPct).slice(0, 15) : [];
+    const tabelaQuedaProds = produtosRelev.filter(p => p.dAbs < 0).sort((a,b) => a.dAbs - b.dAbs).slice(0, 15);
+    const tabelaQuedaClis = clientesRelev.filter(c => c.dAbs < 0).sort((a,b) => a.dAbs - b.dAbs).slice(0, 15);
+    const quedaProdSO = temSOSlide ? produtosSOPpt.filter(p => p.dAbs < 0).sort((a,b) => a.dAbs - b.dAbs).slice(0, 15) : [];
+    const quedaCliSO = temSOSlide ? clientesSOPpt.filter(c => c.dAbs < 0).sort((a,b) => a.dAbs - b.dAbs).slice(0, 15) : [];
+
+    // Calcular peso% (contribuição de cada item na queda total do top 15)
+    function adicionarPeso(arr){
+      const total = arr.reduce((s, r) => s + Math.abs(r.dAbs), 0);
+      return arr.map(r => ({...r, peso: total > 0 ? (Math.abs(r.dAbs)/total*100) : 0}));
+    }
+    const tabelaQuedaProdsP = adicionarPeso(tabelaQuedaProds);
+    const tabelaQuedaClisP = adicionarPeso(tabelaQuedaClis);
+    const quedaProdSOP = adicionarPeso(quedaProdSO);
+    const quedaCliSOP = adicionarPeso(quedaCliSO);
 
     function renderQuadranteQueda(slide, x, y, w, h, titulo, corHeader, items, vazioMsg){
       slide.addText(titulo, {x:x, y:y, w:w, h:0.3, fontSize:11, bold:true, color:corHeader, fontFace:'Open Sans'});
@@ -6027,18 +6104,20 @@ async function exportPPTX(){
         const rows = [[
           {text:'#', options:{bold:true, color:BRANCO, fill:{color:corHeader}, align:'center', fontSize:8}},
           {text:'Nome', options:{bold:true, color:BRANCO, fill:{color:corHeader}, fontSize:8}},
-          {text:'Atual', options:{bold:true, color:BRANCO, fill:{color:corHeader}, align:'right', fontSize:8}},
-          {text:'Δ %', options:{bold:true, color:BRANCO, fill:{color:corHeader}, align:'right', fontSize:8}}
+          {text:'Δ Abs', options:{bold:true, color:BRANCO, fill:{color:corHeader}, align:'right', fontSize:8}},
+          {text:'Δ %', options:{bold:true, color:BRANCO, fill:{color:corHeader}, align:'right', fontSize:8}},
+          {text:'Peso', options:{bold:true, color:BRANCO, fill:{color:corHeader}, align:'right', fontSize:8}}
         ]];
         items.slice(0, 12).forEach((r,i) => {
           rows.push([
             {text:String(i+1), options:{fill:{color:BRANCO}, align:'center', fontSize:8}},
             {text:r.nome, options:{fill:{color:BRANCO}, bold:true, fontSize:8}},
-            {text:fmt(r.atual), options:{fill:{color:BRANCO}, align:'right', fontSize:8}},
-            {text:`${r.dPct.toFixed(1)}%`, options:{fill:{color:BRANCO}, align:'right', bold:true, color:VERMELHO, fontSize:8}}
+            {text:`-${fmt(Math.abs(r.dAbs))}`, options:{fill:{color:BRANCO}, align:'right', bold:true, color:VERMELHO, fontSize:8}},
+            {text:`${r.dPct.toFixed(1)}%`, options:{fill:{color:BRANCO}, align:'right', color:VERMELHO, fontSize:8}},
+            {text:`${r.peso.toFixed(1)}%`, options:{fill:{color:BRANCO}, align:'right', bold:true, color:'003595', fontSize:8}}
           ]);
         });
-        slide.addTable(rows, {x:x, y:y+0.32, w:w, h:h-0.32, colW:[0.3, w-1.7, 0.7, 0.7], fontSize:8, border:{type:'solid', pt:0.5, color:'E5E7EB'}});
+        slide.addTable(rows, {x:x, y:y+0.32, w:w, h:h-0.32, colW:[0.3, w-2.5, 0.7, 0.7, 0.8], fontSize:8, border:{type:'solid', pt:0.5, color:'E5E7EB'}});
       } else {
         slide.addText(vazioMsg, {x:x, y:y+0.4, w:w, h:0.4, fontSize:10, italic:true, color:VERDE, fill:{color:'D1FAE5'}, valign:'middle', margin:8});
       }
@@ -6046,20 +6125,20 @@ async function exportPPTX(){
 
     // Quadrante 1 (top-left): Sell-in Clientes
     renderQuadranteQueda(sTQ, 0.3, 0.85, 6.3, 3.0,
-      'SELL-IN · Clientes', AZUL, tabelaQuedaClis, 'Sem clientes em queda neste filtro');
+      'SELL-IN · Clientes (ordenado por peso na queda)', AZUL, tabelaQuedaClisP, 'Sem clientes em queda neste filtro');
 
     // Quadrante 2 (top-right): Sell-in Produtos
-    const labelProdQ = `SELL-IN · Produtos${usaFoco ? ' (FOCO)' : ''}`;
+    const labelProdQ = `SELL-IN · Produtos${usaFoco ? ' (FOCO)' : ''} (ordenado por peso)`;
     renderQuadranteQueda(sTQ, 6.8, 0.85, 6.3, 3.0,
-      labelProdQ, AZUL, tabelaQuedaProds, 'Sem produtos em queda neste filtro');
+      labelProdQ, AZUL, tabelaQuedaProdsP, 'Sem produtos em queda neste filtro');
 
     // Quadrante 3 e 4 (bottom): Sell-out Redes e Produtos
     if(temSOSlide){
       renderQuadranteQueda(sTQ, 0.3, 4.05, 6.3, 2.7,
-        'SELL-OUT · Redes', '1E40AF', quedaCliSO, 'Sem redes em queda neste filtro');
+        'SELL-OUT · Redes (ordenado por peso)', '1E40AF', quedaCliSOP, 'Sem redes em queda neste filtro');
 
       renderQuadranteQueda(sTQ, 6.8, 4.05, 6.3, 2.7,
-        'SELL-OUT · Produtos', '1E40AF', quedaProdSO, 'Sem produtos em queda neste filtro');
+        'SELL-OUT · Produtos (ordenado por peso)', '1E40AF', quedaProdSOP, 'Sem produtos em queda neste filtro');
 
       sTQ.addText(`Sell-out · ${labelSOPeriodo} · filtros: Franquia, Tipo, Produto`, {
         x:0.3, y:6.85, w:12.7, h:0.3, fontSize:9, italic:true, color:CINZA, align:'center'
@@ -6089,17 +6168,18 @@ async function exportPPTX(){
         x:0.3, y:1.2, w:6.3, h:0.5, fontSize:11, italic:true, color:VERDE, fill:{color:'D1FAE5'}, valign:'middle', margin:8
       });
     } else {
-      // Top 3 produtos com cruzamento
+      // Top 3 produtos com cruzamento + peso na queda
       const top3PQ = quedaProds.slice(0, 3);
       const blocosTop3Q = [{text:'Top 3 produtos · clientes que mais caem', options:{fontSize:10, bold:true, color:AZUL, breakLine:true}}];
       top3PQ.forEach((p, idx) => {
+        const pesoPQ = totalQuedaAbs ? (Math.abs(p.dAbs) / totalQuedaAbs * 100) : 0;
         const clientesDoProd = cruzamentoPpt[p.nome] ? Object.entries(cruzamentoPpt[p.nome])
           .map(([c, v]) => ({nome:c, atual:v.atual, comp:v.comp, dAbs:v.atual-v.comp, dPct: v.comp?((v.atual-v.comp)/v.comp*100):0}))
           .filter(c => c.dAbs < 0 && (totaisCliPpt[c.nome]?.brlAtual || 0) >= THRESHOLD_BRL)
           .sort((a,b) => a.dAbs - b.dAbs)
           .slice(0, 3) : [];
         blocosTop3Q.push({text:`${idx+1}. ${p.nome}`, options:{fontSize:10, bold:true, color:'1f2937', breakLine:true}});
-        blocosTop3Q.push({text:`-${fmt(Math.abs(p.dAbs))} (${p.dPct.toFixed(1)}%)`, options:{fontSize:9, color:VERMELHO, bold:true, breakLine:true}});
+        blocosTop3Q.push({text:`-${fmt(Math.abs(p.dAbs))} (${p.dPct.toFixed(1)}%) · ${pesoPQ.toFixed(0)}% da queda`, options:{fontSize:9, color:VERMELHO, bold:true, breakLine:true}});
         clientesDoProd.forEach(c => {
           blocosTop3Q.push({text:`   • ${c.nome}: -${fmt(Math.abs(c.dAbs))} (${c.dPct.toFixed(1)}%)`, options:{fontSize:8, color:'334155', breakLine:true}});
         });
@@ -6137,17 +6217,18 @@ async function exportPPTX(){
           x:6.8, y:1.2, w:6.3, h:0.5, fontSize:11, italic:true, color:VERDE, fill:{color:'D1FAE5'}, valign:'middle', margin:8
         });
       } else {
-        // Top 3 produtos SO com cruzamento
+        // Top 3 produtos SO com cruzamento + peso na queda
         const top3PSO = quedaProdSOdiag.slice(0, 3);
         const blocosTop3SO = [{text:'Top 3 produtos · redes que mais caem', options:{fontSize:10, bold:true, color:'1E40AF', breakLine:true}}];
         top3PSO.forEach((p, idx) => {
+          const pesoPSOQ = totalQuedaSOAbs ? (Math.abs(p.dAbs) / totalQuedaSOAbs * 100) : 0;
           const redesDoProd = cruzamentoSOPpt[p.nome] ? Object.entries(cruzamentoSOPpt[p.nome])
             .map(([c, v]) => ({nome:c, atual:v.atual, comp:v.comp, dAbs:v.atual-v.comp, dPct: v.comp?((v.atual-v.comp)/v.comp*100):0, unidComp: v.unidComp || 0}))
             .filter(c => c.dAbs < 0 && c.unidComp >= 50)  // mínimo 50 unid no comp pra evitar 1→0 = -100%
             .sort((a,b) => a.dAbs - b.dAbs)
             .slice(0, 3) : [];
           blocosTop3SO.push({text:`${idx+1}. ${p.nome}`, options:{fontSize:10, bold:true, color:'1f2937', breakLine:true}});
-          blocosTop3SO.push({text:`-${fmt(Math.abs(p.dAbs))} (${p.dPct.toFixed(1)}%)`, options:{fontSize:9, color:VERMELHO, bold:true, breakLine:true}});
+          blocosTop3SO.push({text:`-${fmt(Math.abs(p.dAbs))} (${p.dPct.toFixed(1)}%) · ${pesoPSOQ.toFixed(0)}% da queda`, options:{fontSize:9, color:VERMELHO, bold:true, breakLine:true}});
           redesDoProd.forEach(c => {
             blocosTop3SO.push({text:`   • ${c.nome}: -${fmt(Math.abs(c.dAbs))} (${c.dPct.toFixed(1)}%)`, options:{fontSize:8, color:'334155', breakLine:true}});
           });
