@@ -1001,6 +1001,39 @@ function indexarPorNomeNormalizado(dictPorProduto){
 }
 
 // ============================================================
+// FILTRO DE PRODUTO COM MATCH FLEXÍVEL SI ↔ SO
+// Aceita um Set de produtos selecionados (do filtro SI) e um nome de produto SO.
+// Retorna true se o produto SO bate com algum produto do filtro, mesmo com sufixos diferentes.
+// Construa um cache de produtos do filtro NORMALIZADOS para performance.
+// ============================================================
+const _cacheSetNorm = new WeakMap();
+function construirSetProdutosNorm(produtoSet){
+  if(!produtoSet) return null;
+  // Memoiza pelo Set passado (evita recomputar a cada chamada dentro de loops)
+  if(_cacheSetNorm.has(produtoSet)) return _cacheSetNorm.get(produtoSet);
+  const norm = new Set();
+  produtoSet.forEach(p => {
+    const n = normalizarNomeProduto(p);
+    if(n) norm.add(n);
+  });
+  _cacheSetNorm.set(produtoSet, norm);
+  return norm;
+}
+
+// Verifica se um produto sell-out bate com o filtro (já normalizado)
+function produtoBateFiltro(produtoSO, produtoSetNorm){
+  if(!produtoSetNorm) return true; // sem filtro = aceita tudo
+  // 1. Tenta nome normalizado direto
+  const norm = normalizarNomeProduto(produtoSO);
+  if(produtoSetNorm.has(norm)) return true;
+  // 2. Match parcial: produto SO contém algum filtro ou vice-versa
+  for(const filtro of produtoSetNorm){
+    if(norm.includes(filtro) || filtro.includes(norm)) return true;
+  }
+  return false;
+}
+
+// ============================================================
 // DADOS DE EXEMPLO (3 colunas separadas)
 // ============================================================
 function gerarDadosExemplo(){
@@ -2120,10 +2153,12 @@ function renderResumo(per){
     const periodoCompSetSO = new Set(periodoSelloutComp.map(p => `${p.ano}-${p.mes}`));
 
     // Filtrar sell-out aplicando filtros (Franquia, TipoCliente, Produto)
+    // Pré-computa set normalizado de produtos pra performance
+    const produtoSetNormResumo = construirSetProdutosNorm(produtoSet);
     const dadosSelloutFiltrados = rawDataSellout.filter(r => {
       if(franquiasSet && !franquiasSet.has(String(r.FRANQUIA))) return false;
       if(tipoSet && !tipoSet.has(r.TIPO_CLIENTE)) return false;
-      if(produtoSet && !produtoSet.has(r.PRODUTO)) return false;
+      if(produtoSetNormResumo && !produtoBateFiltro(r.PRODUTO, produtoSetNormResumo)) return false;
       return true;
     });
 
@@ -2326,7 +2361,7 @@ function renderComparativo(per){
   for(const r of rawDataSellout){
     if(franquiasSet && !franquiasSet.has(String(r.FRANQUIA))) continue;
     if(tipoSet && !tipoSet.has(r.TIPO_CLIENTE)) continue;
-    if(produtoSet && !produtoSet.has(r.PRODUTO)) continue;
+    if(produtoSet && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSet))) continue;
     const k = `${r.ANO}-${r.MES}`;
     const isAtual = k === ultMesSO;
     const isComp = k === ultMesSOComp;
@@ -2550,7 +2585,7 @@ function renderKPIs(data, per){
     for(const r of rawDataSellout){
       if(franquiasSet && !franquiasSet.has(String(r.FRANQUIA))) continue;
       if(tipoSet && !tipoSet.has(r.TIPO_CLIENTE)) continue;
-      if(produtoSet && !produtoSet.has(r.PRODUTO)) continue;
+      if(produtoSet && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSet))) continue;
       const k = `${r.ANO}-${r.MES}`;
       const v = metricaAtual === 'UNID' ? (+r.UNID || 0) : (+r.BRL || 0);
       if(periodoAtualSetSO.has(k)) atual += v;
@@ -2782,7 +2817,7 @@ function renderInsights(data, per){
     for(const r of rawDataSellout){
       if(franquiasSetIns && !franquiasSetIns.has(String(r.FRANQUIA))) continue;
       if(tipoSetIns && !tipoSetIns.has(r.TIPO_CLIENTE)) continue;
-      if(produtoSetIns && !produtoSetIns.has(r.PRODUTO)) continue;
+      if(produtoSetIns && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSetIns))) continue;
       const k = `${r.ANO}-${r.MES}`;
       const v = metricaAtual === 'UNID' ? (+r.UNID || 0) : (+r.BRL || 0);
       if(k === ultMesAtualKey) soAtual += v;
@@ -3577,7 +3612,7 @@ function renderChartSellout(per){
   for(const r of rawDataSellout){
     if(franquiasSet && !franquiasSet.has(String(r.FRANQUIA))) continue;
     if(tipoSet && !tipoSet.has(r.TIPO_CLIENTE)) continue;
-    if(produtoSet && !produtoSet.has(r.PRODUTO)) continue;
+    if(produtoSet && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSet))) continue;
     const v = metricaAtual === 'UNID' ? (+r.UNID || 0) : (+r.BRL || 0);
     if(r.ANO === anoAtual && serieAtual[r.MES-1] !== null) serieAtual[r.MES-1] += v;
     if(r.ANO === anoAnt && serieAnt[r.MES-1] !== null) serieAnt[r.MES-1] += v;
@@ -3912,7 +3947,7 @@ function agregarSellout(groupBy){
   for(const r of rawDataSellout){
     if(franquiasSet && !franquiasSet.has(String(r.FRANQUIA))) continue;
     if(tipoSet && !tipoSet.has(r.TIPO_CLIENTE)) continue;
-    if(produtoSet && !produtoSet.has(r.PRODUTO)) continue;
+    if(produtoSet && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSet))) continue;
     const k = `${r.ANO}-${r.MES}`;
     if(k !== kAtual && k !== kComp) continue;
     // Para PRODUTO, usar nome normalizado pra casar com SI ("PATANOL S (NVR)" -> "PATANOL S")
@@ -4673,7 +4708,7 @@ async function exportPPTX(){
       for(const r of rawDataSellout){
         if(franquiasSetSO && !franquiasSetSO.has(String(r.FRANQUIA))) continue;
         if(tipoSetSO && !tipoSetSO.has(r.TIPO_CLIENTE)) continue;
-        if(produtoSetSO && !produtoSetSO.has(r.PRODUTO)) continue;
+        if(produtoSetSO && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSetSO))) continue;
         const k = `${r.ANO}-${r.MES}`;
         const v = metricaAtual === 'UNID' ? (+r.UNID || 0) : (+r.BRL || 0);
         if(k === kAtual) atual += v;
@@ -4929,7 +4964,7 @@ async function exportPPTX(){
       const dadosSelloutFiltrados = rawDataSellout.filter(r => {
         if(franquiasSetR && !franquiasSetR.has(String(r.FRANQUIA))) return false;
         if(tipoSetR && !tipoSetR.has(r.TIPO_CLIENTE)) return false;
-        if(produtoSetR && !produtoSetR.has(r.PRODUTO)) return false;
+        if(produtoSetR && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSetR))) return false;
         return true;
       });
 
@@ -5083,7 +5118,7 @@ async function exportPPTX(){
       for(const r of rawDataSellout){
         if(franquiasSetC && !franquiasSetC.has(String(r.FRANQUIA))) continue;
         if(tipoSetC && !tipoSetC.has(r.TIPO_CLIENTE)) continue;
-        if(produtoSetC && !produtoSetC.has(r.PRODUTO)) continue;
+        if(produtoSetC && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSetC))) continue;
         const k = `${r.ANO}-${r.MES}`;
         const isAtual = k === ultMesSO_C;
         const isComp = k === ultMesSOComp_C;
@@ -5694,7 +5729,7 @@ async function exportPPTX(){
       for(const r of rawDataSellout){
         if(franquiasSetSO && !franquiasSetSO.has(String(r.FRANQUIA))) continue;
         if(tipoSetSO && !tipoSetSO.has(r.TIPO_CLIENTE)) continue;
-        if(produtoSetSO && !produtoSetSO.has(r.PRODUTO)) continue;
+        if(produtoSetSO && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSetSO))) continue;
         const k = `${r.ANO}-${r.MES}`;
         const isAtual = setAtualSO.has(k);
         const isComp = setCompSO.has(k);
