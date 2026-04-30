@@ -2306,11 +2306,29 @@ function renderComparativo(per){
 
   card.style.display = 'block';
 
-  // Filtros aplicados (exceto cliente)
+  // Filtros aplicados (incluindo cliente)
   const fontesSet = fontesSelecionadas.length ? new Set(fontesSelecionadas) : null;
   const franquiasSet = franquiasSelecionadas.length ? new Set(franquiasSelecionadas) : null;
   const tipoSet = tiposClienteSelecionados.length ? new Set(tiposClienteSelecionados) : null;
   const produtoSet = produtosSelecionados.length ? new Set(produtosSelecionados) : null;
+  const clienteSet = clientesSelecionados.length ? new Set(clientesSelecionados) : null;
+
+  // Para sell-out, normaliza nomes de cliente para match flexível (ex: filtro "RAIA DROGASIL" → "GRUPO RAIA DROGASIL" no SO)
+  function clienteBateFiltroSO(clienteSO){
+    if(!clienteSet) return true; // sem filtro = aceita tudo
+    if(clienteSet.has(clienteSO)) return true; // match exato
+    // Match flexível: o nome da rede pode estar em formato diferente entre SI e SO
+    const upSO = String(clienteSO).toUpperCase().trim();
+    for(const filtro of clienteSet){
+      const upF = String(filtro).toUpperCase().trim();
+      if(upSO.includes(upF) || upF.includes(upSO)) return true;
+      // Match por primeira palavra significativa (ex: RAIA, DPSP, PROFARMA)
+      const firstSO = upSO.split(/\s+/).find(w => w.length >= 4);
+      const firstF = upF.split(/\s+/).find(w => w.length >= 4);
+      if(firstSO && firstF && firstSO === firstF) return true;
+    }
+    return false;
+  }
 
   // Sell-in: período atual e comparado conforme filtro
   const periodoAtualSetSI = new Set(per.periodoAtual.map(p => `${p.ano}-${p.mes}`));
@@ -2363,6 +2381,7 @@ function renderComparativo(per){
     if(franquiasSet && !franquiasSet.has(String(r[COLS.FRANQUIA]))) continue;
     if(tipoSet && !tipoSet.has(r[COLS.TIPO_CLIENTE])) continue;
     if(produtoSet && !produtoSet.has(r[COLS.PRODUTO])) continue;
+    if(clienteSet && !clienteSet.has(r[COLS.CLIENTE])) continue;
     const k = `${r[COLS.ANO]}-${r[COLS.MES_NUM]}`;
     const isAtual = periodoAtualSetSI.has(k);
     const isComp = periodoCompSetSI.has(k);
@@ -2398,6 +2417,7 @@ function renderComparativo(per){
     if(franquiasSet && !franquiasSet.has(String(r.FRANQUIA))) continue;
     if(tipoSet && !tipoSet.has(r.TIPO_CLIENTE)) continue;
     if(produtoSetNormComp && !produtoBateFiltro(r.PRODUTO, produtoSetNormComp)) continue;
+    if(clienteSet && !clienteBateFiltroSO(r.GRUPO_PAINEL)) continue;
     const k = `${r.ANO}-${r.MES}`;
     const isAtual = periodoAtualSetSO.has(k);
     const isComp = periodoCompSetSO.has(k);
@@ -2424,6 +2444,17 @@ function renderComparativo(per){
       if(isAtual){ soPorFranquia[fr].atual += valor; soPorFranquia[fr].brlAtual += brl; }
       if(isComp) soPorFranquia[fr].comp += valor;
     }
+  }
+
+  // Aviso se filtro de cliente foi aplicado mas sell-out ficou vazio
+  // (cliente do sell-in pode não existir no sell-out)
+  const totalSO = Object.values(soPorRede).reduce((s,v) => s + v.atual + v.comp, 0)
+                + Object.values(soPorProduto).reduce((s,v) => s + v.atual + v.comp, 0);
+  if(clienteSet && totalSO === 0){
+    const clientesFiltrados = [...clienteSet].slice(0,3).join(', ') + (clienteSet.size > 3 ? '...' : '');
+    aviso.innerHTML = `<b>⚠️ Sell-out não disponível para o(s) cliente(s) filtrado(s):</b> ${clientesFiltrados}.<br>
+      Os clientes filtrados existem no sell-in, mas o painel sell-out (Close-Up) não cobre essas redes/clientes especificamente.<br>
+      <span style="font-size:11px;color:#92400e">Sugestão: remova o filtro de cliente para ver o comparativo SI×SO em base agregada.</span>`;
   }
 
   // Helper: match flexível entre nomes de produto/rede sell-in vs sell-out
