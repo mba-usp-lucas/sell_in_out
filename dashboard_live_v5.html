@@ -2507,7 +2507,7 @@ function renderComparativo(per){
       <span style="font-size:11px;color:#92400e">Sugestão: remova o filtro de cliente para ver o comparativo SI×SO em base agregada.</span>`;
   }
 
-  // Helper: match flexível entre nomes de produto/rede sell-in vs sell-out
+  // Helper: match flexível entre nomes de PRODUTO sell-in vs sell-out
   // Para PRODUTOS, soPorProduto está indexado pelo nome normalizado (sem sufixos como (NVR))
   // então tentamos primeiro a busca normalizada
   function matchByName(nomeAlvo, dictSO){
@@ -2528,13 +2528,48 @@ function renderComparativo(per){
     return null;
   }
 
+  // Match ESTRITO de redes — evita falsos positivos comuns em nomes de cliente
+  // Palavras genéricas (GRUPO, DROGARIA, FARMA, REDE, etc) NÃO são suficientes pra match
+  // Só faz match se houver palavra significativa em comum (4+ caracteres NÃO genérica)
+  const PALAVRAS_GENERICAS_REDE = new Set([
+    'GRUPO', 'GRUPOS', 'DROGARIA', 'DROGARIAS', 'FARMA', 'FARMACIA', 'FARMACIAS',
+    'REDE', 'REDES', 'DISTRIBUIDORA', 'COMERCIAL', 'SAUDE', 'SA', 'LTDA', 'EIRELI',
+    'PHARMA', 'DROGA', 'DROGAS'
+  ]);
+  function matchRedeName(nomeAlvo, dictSO){
+    // Match exato (case insensitive)
+    if(dictSO[nomeAlvo]) return dictSO[nomeAlvo];
+    const upAlvo = String(nomeAlvo).toUpperCase().trim();
+    // Buscar match exato case insensitive
+    for(const nomeSO of Object.keys(dictSO)){
+      if(nomeSO.toUpperCase().trim() === upAlvo) return dictSO[nomeSO];
+    }
+    // Match por palavras significativas em comum
+    // Extrai TODAS palavras significativas (não-genéricas, 4+ caracteres) de cada lado
+    const palavrasSignif = (s) => s.split(/[\s(,.\-]/)
+      .map(w => w.trim())
+      .filter(w => w.length >= 4 && !PALAVRAS_GENERICAS_REDE.has(w));
+    const palavrasAlvo = new Set(palavrasSignif(upAlvo));
+    if(palavrasAlvo.size === 0) return null; // nome sem palavras distintivas, não tenta fuzzy
+    for(const nomeSO of Object.keys(dictSO)){
+      const palavrasSO = palavrasSignif(nomeSO.toUpperCase().trim());
+      // Tem que ter ao menos UMA palavra significativa em comum
+      for(const p of palavrasSO){
+        if(palavrasAlvo.has(p)) return dictSO[nomeSO];
+      }
+    }
+    return null;
+  }
+
   // Helper: cruzar sell-in × sell-out e classificar
-  function cruzar(siDict, soDict, threshold = 100000){
+  // tipoMatch: 'produto' (default, fuzzy) ou 'rede' (estrito)
+  function cruzar(siDict, soDict, threshold = 100000, tipoMatch = 'produto'){
+    const matchFn = tipoMatch === 'rede' ? matchRedeName : matchByName;
     const lista = [];
     for(const nome of Object.keys(siDict)){
       const si = siDict[nome];
       if(si.brlAtual < threshold) continue; // ignora itens irrelevantes
-      const so = matchByName(nome, soDict);
+      const so = matchFn(nome, soDict);
       if(!so || (so.atual === 0 && so.comp === 0)) continue;
       const siVar = si.comp ? ((si.atual - si.comp) / si.comp * 100) : (si.atual > 0 ? 100 : 0);
       const soVar = so.comp ? ((so.atual - so.comp) / so.comp * 100) : (so.atual > 0 ? 100 : 0);
@@ -2554,9 +2589,9 @@ function renderComparativo(per){
     return lista;
   }
 
-  const cruzProdutos = cruzar(siPorProduto, soPorProduto, 100000);
-  const cruzRedes = cruzar(siPorRede, soPorRede, 100000);
-  const cruzFranquias = cruzar(siPorFranquia, soPorFranquia, 0); // sem threshold pra franquia
+  const cruzProdutos = cruzar(siPorProduto, soPorProduto, 100000, 'produto');
+  const cruzRedes = cruzar(siPorRede, soPorRede, 100000, 'rede');
+  const cruzFranquias = cruzar(siPorFranquia, soPorFranquia, 0, 'rede'); // franquia também usa match estrito
 
   // Helper: render lista de itens em um bloco
   function renderItens(lista, classe, badge, tipoLabel){
