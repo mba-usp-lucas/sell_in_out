@@ -3994,9 +3994,10 @@ function agregarSellout(groupBy){
     if(!chave) continue;
     const valor = metricaAtual === 'UNID' ? (+r.UNID || 0) : (+r.BRL || 0);
     const brl = +r.BRL || 0;
-    if(!result[chave]) result[chave] = {atual:0, comp:0, brlAtual:0, franquia: r.FRANQUIA, tipo: r.TIPO_CLIENTE};
-    if(k === kAtual){ result[chave].atual += valor; result[chave].brlAtual += brl; }
-    if(k === kComp) result[chave].comp += valor;
+    const unid = +r.UNID || 0;
+    if(!result[chave]) result[chave] = {atual:0, comp:0, brlAtual:0, unidAtual:0, unidComp:0, franquia: r.FRANQUIA, tipo: r.TIPO_CLIENTE};
+    if(k === kAtual){ result[chave].atual += valor; result[chave].brlAtual += brl; result[chave].unidAtual += unid; }
+    if(k === kComp){ result[chave].comp += valor; result[chave].unidComp += unid; }
   }
   return result;
 }
@@ -4008,7 +4009,7 @@ function renderTopClientesSO(per){
   const ultMes = selloutUltimoPeriodo;
   const labelMes = `${MESES_NOME[ultMes.mes-1]}/${ultMes.ano} vs ${MESES_NOME[ultMes.mes-1]}/${ultMes.ano-1}`;
   document.getElementById('topClientesAvisoSO').style.display = 'inline-block';
-  document.getElementById('topClientesAvisoSO').innerHTML = `<span class="fonte-aviso">🛒 Sell-out · ${labelMes} · M-2</span>`;
+  document.getElementById('topClientesAvisoSO').innerHTML = `<span class="fonte-aviso">🛒 Sell-out · ${labelMes} · M-2 · ≥50 unid</span>`;
 
   const agg = agregarSellout('GRUPO_PAINEL') || {};
   const linhas = Object.keys(agg).map(c => {
@@ -4075,14 +4076,14 @@ function renderTopProdutosSO(per){
   const ultMes = selloutUltimoPeriodo;
   const labelMes = `${MESES_NOME[ultMes.mes-1]}/${ultMes.ano} vs ${MESES_NOME[ultMes.mes-1]}/${ultMes.ano-1}`;
   document.getElementById('topProdutosAvisoSO').style.display = 'inline-block';
-  document.getElementById('topProdutosAvisoSO').innerHTML = `<span class="fonte-aviso">🛒 Sell-out · ${labelMes} · M-2</span>`;
+  document.getElementById('topProdutosAvisoSO').innerHTML = `<span class="fonte-aviso">🛒 Sell-out · ${labelMes} · M-2 · ≥50 unid</span>`;
 
   const agg = agregarSellout('PRODUTO') || {};
   const linhas = Object.keys(agg).map(p => {
     const a = agg[p].atual, cp = agg[p].comp;
     const dPct = cp?((a-cp)/cp*100):(a>0?100:0);
-    return {produto:p, franquia:agg[p].franquia, atual:a, comp:cp, dAbs:a-cp, dPct};
-  }).filter(r => r.atual > 0).sort((a,b)=>b.atual-a.atual).slice(0,15);
+    return {produto:p, franquia:agg[p].franquia, atual:a, comp:cp, dAbs:a-cp, dPct, unidComp:agg[p].unidComp||0};
+  }).filter(r => r.atual > 0 && r.unidComp >= 50).sort((a,b)=>b.atual-a.atual).slice(0,15);
 
   document.querySelector('#tabelaProdutos tbody').innerHTML = linhas.map((r,i)=>{
     return `<tr>
@@ -4115,14 +4116,16 @@ function renderCrescimento(data, per){
 
   if(fonteCrescimento === 'SO' && rawDataSellout && rawDataSellout.length > 0 && selloutUltimoPeriodo){
     document.getElementById('cresceAvisoSO').style.display = 'inline-block';
-    document.getElementById('cresceAvisoSO').innerHTML = `<span class="fonte-aviso">🛒 Sell-out · ${MESES_NOME[selloutUltimoPeriodo.mes-1]}/${selloutUltimoPeriodo.ano} · M-2</span>`;
+    document.getElementById('cresceAvisoSO').innerHTML = `<span class="fonte-aviso">🛒 Sell-out · ${MESES_NOME[selloutUltimoPeriodo.mes-1]}/${selloutUltimoPeriodo.ano} · M-2 · ≥50 unid</span>`;
 
     const aggC = agregarSellout('GRUPO_PAINEL') || {};
     const aggP = agregarSellout('PRODUTO') || {};
-    const lC = Object.keys(aggC).map(k => ({nome:k, atual:aggC[k].atual, brlAtual:aggC[k].brlAtual, dPct:aggC[k].comp?((aggC[k].atual-aggC[k].comp)/aggC[k].comp*100):(aggC[k].atual>0?100:0)}))
-      .filter(r => r.atual > 0 && r.brlAtual >= THRESHOLD_BRL);
-    const lP = Object.keys(aggP).map(k => ({nome:k, atual:aggP[k].atual, brlAtual:aggP[k].brlAtual, dPct:aggP[k].comp?((aggP[k].atual-aggP[k].comp)/aggP[k].comp*100):(aggP[k].atual>0?100:0)}))
-      .filter(r => r.atual > 0 && r.brlAtual >= THRESHOLD_BRL);
+    // Filtro de relevância SO: 50 unidades mínimo no comp (filtra ruído estatístico)
+    const THRESHOLD_UNID_SO = 50;
+    const lC = Object.keys(aggC).map(k => ({nome:k, atual:aggC[k].atual, brlAtual:aggC[k].brlAtual, unidComp:aggC[k].unidComp||0, dPct:aggC[k].comp?((aggC[k].atual-aggC[k].comp)/aggC[k].comp*100):(aggC[k].atual>0?100:0)}))
+      .filter(r => r.atual > 0 && r.unidComp >= THRESHOLD_UNID_SO);
+    const lP = Object.keys(aggP).map(k => ({nome:k, atual:aggP[k].atual, brlAtual:aggP[k].brlAtual, unidComp:aggP[k].unidComp||0, dPct:aggP[k].comp?((aggP[k].atual-aggP[k].comp)/aggP[k].comp*100):(aggP[k].atual>0?100:0)}))
+      .filter(r => r.atual > 0 && r.unidComp >= THRESHOLD_UNID_SO);
 
     const tbl = (sel, arr) => document.querySelector(sel).innerHTML =
       arr.map((r,i)=>`<tr><td><span class="rank top3">${i+1}</span></td><td><b>${r.nome}</b></td>
@@ -4173,14 +4176,16 @@ function renderQueda(data, per){
 
   if(fonteQueda === 'SO' && rawDataSellout && rawDataSellout.length > 0 && selloutUltimoPeriodo){
     document.getElementById('quedaAvisoSO').style.display = 'inline-block';
-    document.getElementById('quedaAvisoSO').innerHTML = `<span class="fonte-aviso">🛒 Sell-out · ${MESES_NOME[selloutUltimoPeriodo.mes-1]}/${selloutUltimoPeriodo.ano} · M-2</span>`;
+    document.getElementById('quedaAvisoSO').innerHTML = `<span class="fonte-aviso">🛒 Sell-out · ${MESES_NOME[selloutUltimoPeriodo.mes-1]}/${selloutUltimoPeriodo.ano} · M-2 · ≥50 unid</span>`;
 
     const aggC = agregarSellout('GRUPO_PAINEL') || {};
     const aggP = agregarSellout('PRODUTO') || {};
-    const lC = Object.keys(aggC).map(k => ({nome:k, atual:aggC[k].atual, brlAtual:aggC[k].brlAtual, dPct:aggC[k].comp?((aggC[k].atual-aggC[k].comp)/aggC[k].comp*100):0}))
-      .filter(r => r.atual > 0 && r.brlAtual >= THRESHOLD_BRL && r.dPct < 0);
-    const lP = Object.keys(aggP).map(k => ({nome:k, atual:aggP[k].atual, brlAtual:aggP[k].brlAtual, dPct:aggP[k].comp?((aggP[k].atual-aggP[k].comp)/aggP[k].comp*100):0}))
-      .filter(r => r.atual > 0 && r.brlAtual >= THRESHOLD_BRL && r.dPct < 0);
+    // Filtro de relevância SO: 50 unidades mínimo no comp (filtra ruído estatístico tipo 1→0)
+    const THRESHOLD_UNID_SO = 50;
+    const lC = Object.keys(aggC).map(k => ({nome:k, atual:aggC[k].atual, brlAtual:aggC[k].brlAtual, unidComp:aggC[k].unidComp||0, dPct:aggC[k].comp?((aggC[k].atual-aggC[k].comp)/aggC[k].comp*100):0}))
+      .filter(r => r.atual > 0 && r.unidComp >= THRESHOLD_UNID_SO && r.dPct < 0);
+    const lP = Object.keys(aggP).map(k => ({nome:k, atual:aggP[k].atual, brlAtual:aggP[k].brlAtual, unidComp:aggP[k].unidComp||0, dPct:aggP[k].comp?((aggP[k].atual-aggP[k].comp)/aggP[k].comp*100):0}))
+      .filter(r => r.atual > 0 && r.unidComp >= THRESHOLD_UNID_SO && r.dPct < 0);
 
     const tbl = (sel, arr) => document.querySelector(sel).innerHTML =
       arr.map((r,i)=>`<tr><td><span class="rank">${i+1}</span></td><td><b>${r.nome}</b></td>
@@ -4232,10 +4237,10 @@ function renderDiagnosticoCresce(data, per){
     const aggC = agregarSellout('GRUPO_PAINEL') || {};
     const aggP = agregarSellout('PRODUTO') || {};
 
-    const cresceClientes = Object.keys(aggC).map(k => ({nome:k, atual:aggC[k].atual, dPct:aggC[k].comp?((aggC[k].atual-aggC[k].comp)/aggC[k].comp*100):0}))
-      .filter(r => r.atual > 0 && r.dPct > 0).sort((a,b)=>b.dPct-a.dPct).slice(0,5);
-    const cresceProdutos = Object.keys(aggP).map(k => ({nome:k, atual:aggP[k].atual, dPct:aggP[k].comp?((aggP[k].atual-aggP[k].comp)/aggP[k].comp*100):0}))
-      .filter(r => r.atual > 0 && r.dPct > 0).sort((a,b)=>b.dPct-a.dPct).slice(0,5);
+    const cresceClientes = Object.keys(aggC).map(k => ({nome:k, atual:aggC[k].atual, unidComp:aggC[k].unidComp||0, dPct:aggC[k].comp?((aggC[k].atual-aggC[k].comp)/aggC[k].comp*100):0}))
+      .filter(r => r.atual > 0 && r.dPct > 0 && r.unidComp >= 50).sort((a,b)=>b.dPct-a.dPct).slice(0,5);
+    const cresceProdutos = Object.keys(aggP).map(k => ({nome:k, atual:aggP[k].atual, unidComp:aggP[k].unidComp||0, dPct:aggP[k].comp?((aggP[k].atual-aggP[k].comp)/aggP[k].comp*100):0}))
+      .filter(r => r.atual > 0 && r.dPct > 0 && r.unidComp >= 50).sort((a,b)=>b.dPct-a.dPct).slice(0,5);
 
     if(cresceClientes.length === 0 && cresceProdutos.length === 0){
       conteudo.innerHTML = '<div style="padding:14px;color:#94a3b8;font-style:italic">Nenhum crescimento relevante em sell-out neste período.</div>';
@@ -4269,10 +4274,10 @@ function renderDiagnosticoQueda(data, per){
     const aggC = agregarSellout('GRUPO_PAINEL') || {};
     const aggP = agregarSellout('PRODUTO') || {};
 
-    const quedaClientes = Object.keys(aggC).map(k => ({nome:k, atual:aggC[k].atual, dPct:aggC[k].comp?((aggC[k].atual-aggC[k].comp)/aggC[k].comp*100):0}))
-      .filter(r => r.atual > 0 && r.dPct < 0).sort((a,b)=>a.dPct-b.dPct).slice(0,5);
-    const quedaProdutos = Object.keys(aggP).map(k => ({nome:k, atual:aggP[k].atual, dPct:aggP[k].comp?((aggP[k].atual-aggP[k].comp)/aggP[k].comp*100):0}))
-      .filter(r => r.atual > 0 && r.dPct < 0).sort((a,b)=>a.dPct-b.dPct).slice(0,5);
+    const quedaClientes = Object.keys(aggC).map(k => ({nome:k, atual:aggC[k].atual, unidComp:aggC[k].unidComp||0, dPct:aggC[k].comp?((aggC[k].atual-aggC[k].comp)/aggC[k].comp*100):0}))
+      .filter(r => r.atual > 0 && r.dPct < 0 && r.unidComp >= 50).sort((a,b)=>a.dPct-b.dPct).slice(0,5);
+    const quedaProdutos = Object.keys(aggP).map(k => ({nome:k, atual:aggP[k].atual, unidComp:aggP[k].unidComp||0, dPct:aggP[k].comp?((aggP[k].atual-aggP[k].comp)/aggP[k].comp*100):0}))
+      .filter(r => r.atual > 0 && r.dPct < 0 && r.unidComp >= 50).sort((a,b)=>a.dPct-b.dPct).slice(0,5);
 
     if(quedaClientes.length === 0 && quedaProdutos.length === 0){
       conteudo.innerHTML = '<div style="padding:14px;color:#94a3b8;font-style:italic">Nenhuma queda relevante em sell-out neste período.</div>';
@@ -5781,38 +5786,51 @@ async function exportPPTX(){
         if(!isAtual && !isComp) continue;
         const valor = metricaAtual === 'UNID' ? (+r.UNID || 0) : (+r.BRL || 0);
         const brl = +r.BRL || 0;
+        const unid = +r.UNID || 0;  // captura unidades sempre (pra filtro de relevância)
 
         const prodOrig = r.PRODUTO, cli = r.GRUPO_PAINEL;
         // Normaliza nome produto SO pra casar com SI (ex: "PATANOL S (NVR)" -> "PATANOL S")
         const prod = normalizarNomeProduto(prodOrig);
         if(prod){
-          if(!totaisProdSO[prod]) totaisProdSO[prod] = {atual:0, comp:0, brlAtual:0};
-          if(isAtual){ totaisProdSO[prod].atual += valor; totaisProdSO[prod].brlAtual += brl; }
-          if(isComp) totaisProdSO[prod].comp += valor;
+          if(!totaisProdSO[prod]) totaisProdSO[prod] = {atual:0, comp:0, brlAtual:0, unidAtual:0, unidComp:0};
+          if(isAtual){ totaisProdSO[prod].atual += valor; totaisProdSO[prod].brlAtual += brl; totaisProdSO[prod].unidAtual += unid; }
+          if(isComp){ totaisProdSO[prod].comp += valor; totaisProdSO[prod].unidComp += unid; }
         }
         if(cli){
-          if(!totaisCliSO[cli]) totaisCliSO[cli] = {atual:0, comp:0, brlAtual:0};
-          if(isAtual){ totaisCliSO[cli].atual += valor; totaisCliSO[cli].brlAtual += brl; }
-          if(isComp) totaisCliSO[cli].comp += valor;
+          if(!totaisCliSO[cli]) totaisCliSO[cli] = {atual:0, comp:0, brlAtual:0, unidAtual:0, unidComp:0};
+          if(isAtual){ totaisCliSO[cli].atual += valor; totaisCliSO[cli].brlAtual += brl; totaisCliSO[cli].unidAtual += unid; }
+          if(isComp){ totaisCliSO[cli].comp += valor; totaisCliSO[cli].unidComp += unid; }
         }
         // Cruzamento Produto x Rede (para diagnóstico) - usar nome normalizado
         if(prod && cli){
           if(!cruzamentoSO[prod]) cruzamentoSO[prod] = {};
-          if(!cruzamentoSO[prod][cli]) cruzamentoSO[prod][cli] = {atual:0, comp:0};
-          if(isAtual) cruzamentoSO[prod][cli].atual += valor;
-          if(isComp) cruzamentoSO[prod][cli].comp += valor;
+          if(!cruzamentoSO[prod][cli]) cruzamentoSO[prod][cli] = {atual:0, comp:0, unidAtual:0, unidComp:0};
+          if(isAtual){ cruzamentoSO[prod][cli].atual += valor; cruzamentoSO[prod][cli].unidAtual += unid; }
+          if(isComp){ cruzamentoSO[prod][cli].comp += valor; cruzamentoSO[prod][cli].unidComp += unid; }
         }
       }
       // Expor para escopo externo
       cruzamentoSOPpt = cruzamentoSO;
       totaisCliSOPpt = totaisCliSO;
-      // Filtrar relevantes (≥100k em BRL)
+
+      // ============================================================
+      // FILTRO DE RELEVÂNCIA SELL-OUT
+      // Critério: pelo menos 50 unidades no período COMP
+      // - Filtra ruído (1→0 = -100% bloqueado)
+      // - Detecta quedas reais (80→50 = -37% passa)
+      // - Volume mínimo confiável estatisticamente
+      // ============================================================
+      const THRESHOLD_UNID_SO = 50;
+      function filtroRelevSO(t){
+        return t.unidComp >= THRESHOLD_UNID_SO;
+      }
+
       produtosSOPpt = Object.entries(totaisProdSO)
-        .filter(([_, t]) => t.brlAtual >= THRESHOLD_BRL || metricaAtual === 'UNID')
-        .map(([p, t]) => ({nome:p, atual:t.atual, comp:t.comp, dAbs:t.atual-t.comp, dPct:t.comp?((t.atual-t.comp)/t.comp*100):(t.atual>0?100:0)}));
+        .filter(([_, t]) => filtroRelevSO(t))
+        .map(([p, t]) => ({nome:p, atual:t.atual, comp:t.comp, dAbs:t.atual-t.comp, dPct:t.comp?((t.atual-t.comp)/t.comp*100):(t.atual>0?100:0), unidComp:t.unidComp}));
       clientesSOPpt = Object.entries(totaisCliSO)
-        .filter(([_, t]) => t.brlAtual >= THRESHOLD_BRL || metricaAtual === 'UNID')
-        .map(([c, t]) => ({nome:c, atual:t.atual, comp:t.comp, dAbs:t.atual-t.comp, dPct:t.comp?((t.atual-t.comp)/t.comp*100):(t.atual>0?100:0)}));
+        .filter(([_, t]) => filtroRelevSO(t))
+        .map(([c, t]) => ({nome:c, atual:t.atual, comp:t.comp, dAbs:t.atual-t.comp, dPct:t.comp?((t.atual-t.comp)/t.comp*100):(t.atual>0?100:0), unidComp:t.unidComp}));
 
       temSOSlide = produtosSOPpt.length > 0 || clientesSOPpt.length > 0;
     }
@@ -5953,8 +5971,8 @@ async function exportPPTX(){
         const blocosTop3SO = [{text:'Top 3 produtos · redes que puxam', options:{fontSize:10, bold:true, color:'1E40AF', breakLine:true}}];
         top3PSO.forEach((p, idx) => {
           const redesDoProd = cruzamentoSOPpt[p.nome] ? Object.entries(cruzamentoSOPpt[p.nome])
-            .map(([c, v]) => ({nome:c, atual:v.atual, comp:v.comp, dAbs:v.atual-v.comp, dPct: v.comp?((v.atual-v.comp)/v.comp*100):0}))
-            .filter(c => c.dAbs > 0)
+            .map(([c, v]) => ({nome:c, atual:v.atual, comp:v.comp, dAbs:v.atual-v.comp, dPct: v.comp?((v.atual-v.comp)/v.comp*100):0, unidComp: v.unidComp || 0}))
+            .filter(c => c.dAbs > 0 && c.unidComp >= 50)  // mínimo 50 unid no comp
             .sort((a,b) => b.dAbs - a.dAbs)
             .slice(0, 3) : [];
           blocosTop3SO.push({text:`${idx+1}. ${p.nome}`, options:{fontSize:10, bold:true, color:'1f2937', breakLine:true}});
@@ -6124,8 +6142,8 @@ async function exportPPTX(){
         const blocosTop3SO = [{text:'Top 3 produtos · redes que mais caem', options:{fontSize:10, bold:true, color:'1E40AF', breakLine:true}}];
         top3PSO.forEach((p, idx) => {
           const redesDoProd = cruzamentoSOPpt[p.nome] ? Object.entries(cruzamentoSOPpt[p.nome])
-            .map(([c, v]) => ({nome:c, atual:v.atual, comp:v.comp, dAbs:v.atual-v.comp, dPct: v.comp?((v.atual-v.comp)/v.comp*100):0}))
-            .filter(c => c.dAbs < 0)
+            .map(([c, v]) => ({nome:c, atual:v.atual, comp:v.comp, dAbs:v.atual-v.comp, dPct: v.comp?((v.atual-v.comp)/v.comp*100):0, unidComp: v.unidComp || 0}))
+            .filter(c => c.dAbs < 0 && c.unidComp >= 50)  // mínimo 50 unid no comp pra evitar 1→0 = -100%
             .sort((a,b) => a.dAbs - b.dAbs)
             .slice(0, 3) : [];
           blocosTop3SO.push({text:`${idx+1}. ${p.nome}`, options:{fontSize:10, bold:true, color:'1f2937', breakLine:true}});
