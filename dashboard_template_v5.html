@@ -2312,14 +2312,45 @@ function renderComparativo(per){
   const periodoAtualSetSI = new Set(per.periodoAtual.map(p => `${p.ano}-${p.mes}`));
   const periodoCompSetSI = new Set(per.periodoComp.map(p => `${p.ano}-${p.mes}`));
 
-  // Sell-out: usa último período disponível (defasagem M-2)
-  const ultMesSO = `${selloutUltimoPeriodo.ano}-${selloutUltimoPeriodo.mes}`;
-  const ultMesSOComp = `${selloutUltimoPeriodo.ano - 1}-${selloutUltimoPeriodo.mes}`;
+  // ============================================================
+  // SELL-OUT: usa MESMOS MESES do filtro do dashboard, cortando para meses disponíveis em SO
+  // (igual ao Card Resumo) - mantém balanceamento atual vs comp
+  // ============================================================
+  const ultMesSO = selloutUltimoPeriodo;
+  function temNoSO(p){
+    return (p.ano < ultMesSO.ano) || (p.ano === ultMesSO.ano && p.mes <= ultMesSO.mes);
+  }
+  let periodoSOAtual = per.periodoAtual.filter(temNoSO);
+  let periodoSOComp = periodoSOAtual.map(p => ({ano: p.ano - 1, mes: p.mes}));
+  let avisoCorteSO = false;
+
+  if(periodoSOAtual.length === 0){
+    // Filtro pediu meses futuros - fallback ao último disponível
+    periodoSOAtual = [{ano: ultMesSO.ano, mes: ultMesSO.mes}];
+    periodoSOComp = [{ano: ultMesSO.ano - 1, mes: ultMesSO.mes}];
+    avisoCorteSO = true;
+  } else if(periodoSOAtual.length < per.periodoAtual.length){
+    avisoCorteSO = true;
+  }
+
+  const periodoAtualSetSO = new Set(periodoSOAtual.map(p => `${p.ano}-${p.mes}`));
+  const periodoCompSetSO = new Set(periodoSOComp.map(p => `${p.ano}-${p.mes}`));
+
+  // Label do período SO para o aviso
+  const labelSOAtual = periodoSOAtual.length === 1
+    ? `${MESES_NOME[periodoSOAtual[0].mes-1]}/${periodoSOAtual[0].ano}`
+    : `${MESES_NOME[periodoSOAtual[0].mes-1]}/${periodoSOAtual[0].ano} a ${MESES_NOME[periodoSOAtual[periodoSOAtual.length-1].mes-1]}/${periodoSOAtual[periodoSOAtual.length-1].ano}`;
+  const labelSOComp = periodoSOComp.length === 1
+    ? `${MESES_NOME[periodoSOComp[0].mes-1]}/${periodoSOComp[0].ano}`
+    : `${MESES_NOME[periodoSOComp[0].mes-1]}/${periodoSOComp[0].ano} a ${MESES_NOME[periodoSOComp[periodoSOComp.length-1].mes-1]}/${periodoSOComp[periodoSOComp.length-1].ano}`;
 
   // Aviso M-2
-  aviso.innerHTML = `<b>Sell-out tem 2 meses de defasagem.</b> Comparativo abaixo usa: Sell-in (${per.labelAtual} vs ${per.labelComp || '—'}) × Sell-out (${MESES_NOME[selloutUltimoPeriodo.mes-1]}/${selloutUltimoPeriodo.ano} vs ${MESES_NOME[selloutUltimoPeriodo.mes-1]}/${selloutUltimoPeriodo.ano - 1}). Em caso de filtros mensais distintos, há possível distorção - prefira MAT 12m para análise mais robusta.`;
+  const avisoTxt = avisoCorteSO
+    ? `<b>Sell-out tem defasagem (M-2).</b> Filtro do dashboard ajustado: Sell-in (${per.labelAtual} vs ${per.labelComp || '—'}) × Sell-out (${labelSOAtual} vs ${labelSOComp}).`
+    : `Comparativo: Sell-in (${per.labelAtual} vs ${per.labelComp || '—'}) × Sell-out (${labelSOAtual} vs ${labelSOComp}).`;
+  aviso.innerHTML = avisoTxt;
 
-  if(lblPer) lblPer.textContent = `· últ. atualização sell-out: ${MESES_NOME[selloutUltimoPeriodo.mes-1]}/${selloutUltimoPeriodo.ano}`;
+  if(lblPer) lblPer.textContent = `· sell-out: ${labelSOAtual}`;
 
   // ============ AGREGAR SELL-IN ============
   const siPorProduto = {}, siPorRede = {}, siPorFranquia = {};
@@ -2358,13 +2389,14 @@ function renderComparativo(per){
   // soPorProduto usa NOME NORMALIZADO para casar com sell-in (que pode não ter sufixo "(NVR)")
   const soPorProduto = {}, soPorRede = {}, soPorFranquia = {};
   const soNomeOriginal = {}; // map nomeNormalizado -> primeiro nome original encontrado (pra display)
+  const produtoSetNormComp = construirSetProdutosNorm(produtoSet);
   for(const r of rawDataSellout){
     if(franquiasSet && !franquiasSet.has(String(r.FRANQUIA))) continue;
     if(tipoSet && !tipoSet.has(r.TIPO_CLIENTE)) continue;
-    if(produtoSet && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSet))) continue;
+    if(produtoSetNormComp && !produtoBateFiltro(r.PRODUTO, produtoSetNormComp)) continue;
     const k = `${r.ANO}-${r.MES}`;
-    const isAtual = k === ultMesSO;
-    const isComp = k === ultMesSOComp;
+    const isAtual = periodoAtualSetSO.has(k);
+    const isComp = periodoCompSetSO.has(k);
     if(!isAtual && !isComp) continue;
     const valor = metricaAtual === 'UNID' ? (+r.UNID || 0) : (+r.BRL || 0);
     const brl = +r.BRL || 0;
@@ -4951,7 +4983,8 @@ async function exportPPTX(){
         periodoSelloutAtualPpt = per.periodoAtual.filter(p => {
           return (p.ano < selloutUltimoPeriodo.ano) || (p.ano === selloutUltimoPeriodo.ano && p.mes <= selloutUltimoPeriodo.mes);
         });
-        periodoSelloutCompPpt = per.periodoComp;
+        // Comp = atual filtrado deslocado 1 ano (mantém mesmo número de meses)
+        periodoSelloutCompPpt = periodoSelloutAtualPpt.map(p => ({ano: p.ano - 1, mes: p.mes}));
         if(periodoSelloutAtualPpt.length === 0){
           periodoSelloutAtualPpt = [{ano: selloutUltimoPeriodo.ano, mes: selloutUltimoPeriodo.mes}];
           periodoSelloutCompPpt = [{ano: selloutUltimoPeriodo.ano - 1, mes: selloutUltimoPeriodo.mes}];
@@ -5079,8 +5112,20 @@ async function exportPPTX(){
 
       const periodoAtualSetSI_C = new Set(per.periodoAtual.map(p => `${p.ano}-${p.mes}`));
       const periodoCompSetSI_C = new Set(per.periodoComp.map(p => `${p.ano}-${p.mes}`));
-      const ultMesSO_C = `${selloutUltimoPeriodo.ano}-${selloutUltimoPeriodo.mes}`;
-      const ultMesSOComp_C = `${selloutUltimoPeriodo.ano - 1}-${selloutUltimoPeriodo.mes}`;
+
+      // Sell-out: usa MESMOS MESES do filtro do dashboard (cortando para meses disponíveis em SO)
+      const ultMesSOObj_C = selloutUltimoPeriodo;
+      function temNoSO_C(p){
+        return (p.ano < ultMesSOObj_C.ano) || (p.ano === ultMesSOObj_C.ano && p.mes <= ultMesSOObj_C.mes);
+      }
+      let periodoSOAtual_C = per.periodoAtual.filter(temNoSO_C);
+      let periodoSOComp_C = periodoSOAtual_C.map(p => ({ano: p.ano - 1, mes: p.mes}));
+      if(periodoSOAtual_C.length === 0){
+        periodoSOAtual_C = [{ano: ultMesSOObj_C.ano, mes: ultMesSOObj_C.mes}];
+        periodoSOComp_C = [{ano: ultMesSOObj_C.ano - 1, mes: ultMesSOObj_C.mes}];
+      }
+      const periodoAtualSetSO_C = new Set(periodoSOAtual_C.map(p => `${p.ano}-${p.mes}`));
+      const periodoCompSetSO_C = new Set(periodoSOComp_C.map(p => `${p.ano}-${p.mes}`));
 
       // Agregação SI
       const siProd = {}, siRede = {}, siFr = {};
@@ -5120,8 +5165,8 @@ async function exportPPTX(){
         if(tipoSetC && !tipoSetC.has(r.TIPO_CLIENTE)) continue;
         if(produtoSetC && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSetC))) continue;
         const k = `${r.ANO}-${r.MES}`;
-        const isAtual = k === ultMesSO_C;
-        const isComp = k === ultMesSOComp_C;
+        const isAtual = periodoAtualSetSO_C.has(k);
+        const isComp = periodoCompSetSO_C.has(k);
         if(!isAtual && !isComp) continue;
         const valor = metricaAtual === 'UNID' ? (+r.UNID || 0) : (+r.BRL || 0);
         const brl = +r.BRL || 0;
