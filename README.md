@@ -18,6 +18,7 @@ Coloque na mesma pasta:
 - `Targets.xlsx` — targets de crescimento % (opcional)
 - `Targets_Financeiros.xlsx` — targets financeiros mensais (opcional)
 - `f_SELLOUT_GERENCIAL.xlsx` — dados de sell-out gerencial (opcional)
+- `DePara_Produtos.xlsx` — mapeamento de nomes de produto SI↔SO (recomendado para sell-out preciso)
 
 ### 3. Configurar paths
 
@@ -27,6 +28,7 @@ PATH_XLSX = r"C:\caminho\para\f_SELLIN.xlsx"
 PATH_TARGETS = r"C:\caminho\para\Targets.xlsx"
 PATH_TARGETS_FIN = r"C:\caminho\para\Targets_Financeiros.xlsx"
 PATH_SELLOUT = r"C:\caminho\para\f_SELLOUT_GERENCIAL.xlsx"
+PATH_DEPARA = r"C:\caminho\para\DePara_Produtos.xlsx"
 ```
 
 ### 4. Executar
@@ -35,6 +37,35 @@ python gerar_dashboard_v5.py
 ```
 
 Gera `dashboard_alcon_sales_insights.html` — abra no navegador.
+
+## 🔗 De-Para de Produtos (Recomendado)
+
+**Por que existe:** Sell-in e Sell-out muitas vezes usam nomes diferentes pro mesmo produto:
+- Sell-in: `SYSTANE ULTRA`
+- Sell-out: `SYSTANE UL` ou `SYSTANE ULTRA (ALC)`
+
+**Sem DePara:** O dashboard usa match aproximado (fuzzy) e pode ter pequenos gaps.
+**Com DePara:** Cruzamento 100% confiável, números exatos.
+
+### Estrutura DePara_Produtos.xlsx
+
+| PRODUTO_SELLIN | PRODUTO_SELLOUT | INCLUIR_DASHBOARD |
+|---|---|---|
+| SYSTANE ULTRA | SYSTANE UL; SYSTANE ULTRA (ALC) | SIM |
+| PATANOL S | PATANOL S (NVR) | SIM |
+| (vazio) | SYSTANE BALANCE | NAO |
+
+**Regras:**
+- Múltiplos nomes sell-out separados por `;` apontam pro MESMO sell-in (são somados)
+- `INCLUIR_DASHBOARD = NAO` ignora completamente (concorrentes, ruído)
+- Produtos não listados aparecem em `produtos_nao_mapeados.csv` (gerado automaticamente) e **não entram no dashboard** até serem mapeados
+
+### Workflow recomendado
+
+1. Roda Python pela 1ª vez sem DePara → console mostra "**X produtos não mapeados**"
+2. Abre `produtos_nao_mapeados.csv` (gerado automaticamente)
+3. Copia colunas pra `DePara_Produtos.xlsx` e classifica
+4. Roda Python novamente → dashboard 100% mapeado
 
 ## 📂 Estrutura dos Arquivos de Dados
 

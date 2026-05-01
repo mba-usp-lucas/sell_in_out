@@ -27,8 +27,10 @@ PATH_XLSX = r"C:\Users\PEREILU3\OneDrive - Alcon\AdHoc_IC\Projeto\INSIGHTS\f_SEL
 PATH_TARGETS = r"C:\Users\PEREILU3\OneDrive - Alcon\AdHoc_IC\Projeto\INSIGHTS\Targets.xlsx"
 PATH_TARGETS_FIN = r"C:\Users\PEREILU3\OneDrive - Alcon\AdHoc_IC\Projeto\INSIGHTS\Targets_Financeiros.xlsx"
 PATH_SELLOUT = r"C:\Users\PEREILU3\OneDrive - Alcon\AdHoc_IC\Projeto\INSIGHTS\f_SELLOUT_GERENCIAL.xlsx"
+PATH_DEPARA = r"C:\Users\PEREILU3\OneDrive - Alcon\AdHoc_IC\Projeto\INSIGHTS\DePara_Produtos.xlsx"
 PATH_OUTPUT = r"dashboard_alcon_sales_insights.html"
 PATH_TEMPLATE = r"dashboard_template_v5.html"
+PATH_NAO_MAPEADOS = r"produtos_nao_mapeados.csv"
 
 COLS = {
     "ANO": "ANO",
@@ -54,14 +56,171 @@ COLS_SELLOUT = {
     "PRODUTO": "PROD_DESC",
     "MEDIDA": "MEDIDA",
     "CHAN_DESC": "CHAN_DESC",  # canal: Farmacia / Hospitalar / Outros / Transferencias
+    "ASSOCIACAO": "ASSOCIAÇÃO",  # ABRAFARMA, FEBRAFAR, AFE, INDEPENDENTE etc.
 }
 MEDIDA_REAIS = "Reais_PPP"
 MEDIDA_UNID = "Unidades"
 
-# Filtro padrao do canal - aplicado SEMPRE no agregado de sell-out
-# Mantem apenas linhas onde CHAN_DESC contem 'farmacia' (case insensitive)
-# Distribuidor pode aparecer com sub-canais: 'Farmacia' (mantem), 'Hospitalar', 'Outros canais', 'Transferencias' (descarta)
-FILTRO_CANAL_PADRAO = "farmacia"
+# Filtro de canal - NAO MAIS APLICADO NO PYTHON
+# A logica de canal agora eh DINAMICA no JS:
+#   - Default: filtra apenas Farmacia
+#   - Quando cliente e Distribuidor (TIPO_CLIENTE_FINAL=DISTRIBUIDOR no sell-in):
+#       traz TODOS os canais (Farmacia + Hospitalar + Outros)
+#   - Quando filtro TIPO_CLIENTE = Distribuidor: idem
+# O Python passa TODOS os registros e o JS aplica condicionalmente
+FILTRO_CANAL_PADRAO = None  # None = nao filtra no Python (filtro dinamico no JS)
+
+
+def ler_depara(path):
+    """Le tabela De-Para Produtos.
+
+    Espera colunas:
+    - PRODUTO_SELLIN: nome canonico do produto no sell-in (pode ter multiplos sell-out apontando para um sell-in)
+    - PRODUTO_SELLOUT: nome do produto no sell-out (pode ter multiplos separados por ;)
+    - INCLUIR_DASHBOARD: 'SIM' ou 'NAO' (default: SIM)
+
+    Retorna:
+    - dict {produto_sellout_norm -> produto_sellin_canonico}
+    - set de produtos a IGNORAR (INCLUIR_DASHBOARD = NAO)
+    """
+    if not Path(path).exists():
+        print(f"[AVISO] DePara nao encontrado em {path}")
+        print(f"        Sera usado match aproximado (resultado pode ter gaps).")
+        print(f"        Para evitar isso, crie um arquivo DePara_Produtos.xlsx com colunas:")
+        print(f"        PRODUTO_SELLIN | PRODUTO_SELLOUT | INCLUIR_DASHBOARD")
+        return {}, set()
+
+    print(f"[OK] Lendo DePara: {path}")
+    df = pd.read_excel(path)
+
+    cols_esperadas = ["PRODUTO_SELLIN", "PRODUTO_SELLOUT", "INCLUIR_DASHBOARD"]
+    for c in cols_esperadas[:2]:  # primeiras 2 sao obrigatorias
+        if c not in df.columns:
+            print(f"[ERRO] Coluna obrigatoria '{c}' ausente no DePara. Coluna sera ignorada.")
+            return {}, set()
+
+    if "INCLUIR_DASHBOARD" not in df.columns:
+        df["INCLUIR_DASHBOARD"] = "SIM"
+
+    # Normalizacao basica do nome (apenas trim + upper) - sem remover sufixos!
+    def norm(s):
+        if pd.isna(s):
+            return ""
+        return str(s).strip().upper()
+
+    mapeamento = {}
+    ignorar = set()
+    total_si = 0
+    total_so = 0
+
+    for _, row in df.iterrows():
+        sellin = norm(row["PRODUTO_SELLIN"])
+        sellout_raw = norm(row["PRODUTO_SELLOUT"])
+        incluir = norm(row.get("INCLUIR_DASHBOARD", "SIM"))
+
+        if not sellout_raw:
+            continue
+
+        # Pode ter multiplos nomes sellout separados por ;
+        sellout_nomes = [s.strip() for s in sellout_raw.split(";") if s.strip()]
+
+        for so_nome in sellout_nomes:
+            if incluir == "NAO":
+                ignorar.add(so_nome)
+                continue
+            if sellin:
+                mapeamento[so_nome] = sellin
+                total_so += 1
+            else:
+                # so_nome sem sellin -> incluir mas nao mapear (mantem nome SO)
+                mapeamento[so_nome] = so_nome  # nome canonico = ele mesmo
+
+        if sellin:
+            total_si += 1
+
+    print(f"     Produtos sell-in mapeados: {total_si}")
+    print(f"     Produtos sell-out mapeados: {total_so}")
+    print(f"     Produtos a ignorar: {len(ignorar)}")
+
+    return mapeamento, ignorar
+
+
+def aplicar_depara_e_relatorio(df_sellout, mapeamento, ignorar, path_csv_nao_mapeados):
+    """Aplica de-para no DataFrame de sell-out.
+
+    1. Filtra produtos da lista de ignorar
+    2. Adiciona coluna PRODUTO_CANONICO (nome do sell-in para cruzamento)
+    3. Salva produtos sem mapeamento em CSV
+    """
+    if df_sellout is None or len(df_sellout) == 0:
+        return df_sellout
+
+    if not mapeamento and not ignorar:
+        # Sem De-Para configurado, mantem nome original como canonico
+        df_sellout["PRODUTO_CANONICO"] = df_sellout["PRODUTO"]
+        return df_sellout
+
+    def normalizar(s):
+        if pd.isna(s):
+            return ""
+        return str(s).strip().upper()
+
+    df_sellout["_PROD_NORM"] = df_sellout["PRODUTO"].apply(normalizar)
+
+    # 1. Filtrar produtos a ignorar
+    antes = len(df_sellout)
+    df_sellout = df_sellout[~df_sellout["_PROD_NORM"].isin(ignorar)].copy()
+    depois = len(df_sellout)
+    if antes != depois:
+        print(f"     Linhas filtradas (INCLUIR_DASHBOARD=NAO): {antes - depois:,}")
+
+    # 2. Aplicar mapeamento
+    df_sellout["PRODUTO_CANONICO"] = df_sellout["_PROD_NORM"].map(mapeamento).fillna(df_sellout["PRODUTO"])
+
+    # 3. Identificar nao-mapeados
+    nao_mapeados_mask = ~df_sellout["_PROD_NORM"].isin(mapeamento.keys()) & ~df_sellout["_PROD_NORM"].isin(ignorar)
+    nao_mapeados = df_sellout[nao_mapeados_mask]
+
+    if len(nao_mapeados) > 0:
+        # Agrupar por produto e somar volume
+        agg = nao_mapeados.groupby("PRODUTO").agg(
+            BRL=("BRL", "sum"),
+            UNID=("UNID", "sum"),
+            LINHAS=("PRODUTO", "size")
+        ).reset_index().sort_values("UNID", ascending=False)
+
+        agg["PRODUTO_SELLIN_SUGESTAO"] = ""
+        agg["INCLUIR_DASHBOARD"] = "SIM"
+
+        # Reordenar colunas pra facilitar copiar para o DePara
+        agg = agg[["PRODUTO", "PRODUTO_SELLIN_SUGESTAO", "INCLUIR_DASHBOARD", "BRL", "UNID", "LINHAS"]]
+        agg = agg.rename(columns={"PRODUTO": "PRODUTO_SELLOUT"})
+
+        agg.to_csv(path_csv_nao_mapeados, index=False, encoding="utf-8-sig")
+
+        print()
+        print("=" * 60)
+        print(f"  PRODUTOS SELL-OUT NAO MAPEADOS NO DEPARA")
+        print("=" * 60)
+        print(f"  Total: {len(agg)} produtos | {len(nao_mapeados):,} linhas")
+        print(f"  CSV gerado: {path_csv_nao_mapeados}")
+        print()
+        print(f"  Top 10 por volume (UNID):")
+        for _, row in agg.head(10).iterrows():
+            print(f"    {row['UNID']:>10,.0f} unid - {row['PRODUTO_SELLOUT']}")
+        print()
+        print(f"  ACAO RECOMENDADA: Abra o CSV e o DePara_Produtos.xlsx,")
+        print(f"  classifique cada produto e rode o script novamente.")
+        print(f"  Esses produtos NAO aparecerao no dashboard ate serem mapeados.")
+        print("=" * 60)
+
+        # Filtrar nao-mapeados (decisao A: nao exibe no dashboard)
+        df_sellout = df_sellout[~nao_mapeados_mask].copy()
+        print(f"     Linhas removidas (nao mapeadas): {len(nao_mapeados):,}")
+
+    df_sellout = df_sellout.drop(columns=["_PROD_NORM"])
+    print(f"     Linhas finais sell-out: {len(df_sellout):,}")
+    return df_sellout
 
 
 def ler_sellout_gerencial(path):
@@ -87,19 +246,20 @@ def ler_sellout_gerencial(path):
 
     for k, col_name in COLS_SELLOUT.items():
         if col_name not in df.columns:
-            # CHAN_DESC pode nao existir em arquivos antigos - apenas avisa
-            if k == "CHAN_DESC":
-                print(f"[AVISO] Coluna '{col_name}' nao encontrada - filtro de canal nao sera aplicado")
+            # Colunas opcionais - apenas avisa
+            if k in ("CHAN_DESC", "ASSOCIACAO"):
+                print(f"[AVISO] Coluna '{col_name}' nao encontrada - feature relacionada nao funcionara")
                 continue
             print(f"[ERRO] Coluna '{col_name}' nao encontrada. Ajuste COLS_SELLOUT no codigo.")
             return [], None
 
-    # Aplicar filtro padrao: apenas farmacia (case insensitive)
-    if COLS_SELLOUT["CHAN_DESC"] in df.columns:
+    # NAO filtra mais por canal no Python (decisao: filtro dinamico no JS)
+    # Mantemos CHAN_DESC para o JS aplicar a logica condicional
+    if FILTRO_CANAL_PADRAO and COLS_SELLOUT["CHAN_DESC"] in df.columns:
         antes = len(df)
         df = df[df[COLS_SELLOUT["CHAN_DESC"]].astype(str).str.contains(FILTRO_CANAL_PADRAO, case=False, na=False)].copy()
         depois = len(df)
-        print(f"     Filtro canal padrao 'farmacia': {antes:,} -> {depois:,} linhas ({100*depois/antes:.1f}%)")
+        print(f"     Filtro canal padrao '{FILTRO_CANAL_PADRAO}': {antes:,} -> {depois:,} linhas ({100*depois/antes:.1f}%)")
 
     cols_id = [
         COLS_SELLOUT["GRUPO_PAINEL"],
@@ -108,6 +268,11 @@ def ler_sellout_gerencial(path):
         COLS_SELLOUT["PRODUTO"],
         COLS_SELLOUT["MEDIDA"],
     ]
+    # Adiciona CHAN_DESC e ASSOCIACAO se existirem (para o JS usar)
+    if COLS_SELLOUT["CHAN_DESC"] in df.columns:
+        cols_id.append(COLS_SELLOUT["CHAN_DESC"])
+    if COLS_SELLOUT["ASSOCIACAO"] in df.columns:
+        cols_id.append(COLS_SELLOUT["ASSOCIACAO"])
     df = df[cols_id + cols_meses].copy()
 
     df_long = df.melt(
@@ -124,15 +289,23 @@ def ler_sellout_gerencial(path):
     df_long["MES"] = df_long["DATA_RAW"].str[5:7].astype(int)
     df_long = df_long.drop(columns=["DATA_RAW"])
 
+    # Index do pivot: inclui CHAN_DESC e ASSOCIACAO se existirem
+    idx_cols = [
+        COLS_SELLOUT["GRUPO_PAINEL"],
+        COLS_SELLOUT["FRANQUIA"],
+        COLS_SELLOUT["TIPO_CLIENTE"],
+        COLS_SELLOUT["PRODUTO"],
+    ]
+    tem_canal = COLS_SELLOUT["CHAN_DESC"] in df_long.columns
+    tem_assoc = COLS_SELLOUT["ASSOCIACAO"] in df_long.columns
+    if tem_canal:
+        idx_cols.append(COLS_SELLOUT["CHAN_DESC"])
+    if tem_assoc:
+        idx_cols.append(COLS_SELLOUT["ASSOCIACAO"])
+    idx_cols += ["ANO", "MES"]
+
     df_pivot = df_long.pivot_table(
-        index=[
-            COLS_SELLOUT["GRUPO_PAINEL"],
-            COLS_SELLOUT["FRANQUIA"],
-            COLS_SELLOUT["TIPO_CLIENTE"],
-            COLS_SELLOUT["PRODUTO"],
-            "ANO",
-            "MES",
-        ],
+        index=idx_cols,
         columns=COLS_SELLOUT["MEDIDA"],
         values="VALOR",
         aggfunc="sum",
@@ -151,12 +324,43 @@ def ler_sellout_gerencial(path):
     df_pivot["BRL"] = df_pivot["BRL"].fillna(0)
     df_pivot["UNID"] = df_pivot["UNID"].fillna(0)
 
-    df_pivot = df_pivot.rename(columns={
+    rename_map = {
         COLS_SELLOUT["GRUPO_PAINEL"]: "GRUPO_PAINEL",
         COLS_SELLOUT["FRANQUIA"]: "FRANQUIA",
         COLS_SELLOUT["TIPO_CLIENTE"]: "TIPO_CLIENTE",
         COLS_SELLOUT["PRODUTO"]: "PRODUTO",
-    })
+    }
+    if tem_canal:
+        rename_map[COLS_SELLOUT["CHAN_DESC"]] = "CHAN_DESC"
+    if tem_assoc:
+        rename_map[COLS_SELLOUT["ASSOCIACAO"]] = "ASSOCIACAO"
+    df_pivot = df_pivot.rename(columns=rename_map)
+
+    # APLICAR DE-PARA DE PRODUTOS
+    # - Substitui PRODUTO pelo nome canonico do sell-in (mantendo o original em PRODUTO_ORIGINAL)
+    # - Filtra produtos da lista 'ignorar'
+    # - Salva nao-mapeados em CSV para revisao
+    mapeamento, ignorar = ler_depara(PATH_DEPARA)
+    df_pivot["PRODUTO_ORIGINAL"] = df_pivot["PRODUTO"]
+    df_pivot = aplicar_depara_e_relatorio(df_pivot, mapeamento, ignorar, PATH_NAO_MAPEADOS)
+    if df_pivot is None or len(df_pivot) == 0:
+        print("[AVISO] Sell-out vazio apos aplicar DePara")
+        return [], None
+
+    # Substituir PRODUTO pelo canonico (que sera usado no dashboard)
+    df_pivot["PRODUTO"] = df_pivot["PRODUTO_CANONICO"]
+    df_pivot = df_pivot.drop(columns=["PRODUTO_CANONICO"])
+
+    # Re-agregar mantendo CHAN_DESC e ASSOCIACAO se existirem
+    group_cols = ["GRUPO_PAINEL", "FRANQUIA", "TIPO_CLIENTE", "PRODUTO"]
+    if tem_canal:
+        group_cols.append("CHAN_DESC")
+    if tem_assoc:
+        group_cols.append("ASSOCIACAO")
+    group_cols += ["ANO", "MES"]
+    df_pivot = df_pivot.groupby(group_cols, dropna=False).agg(
+        BRL=("BRL", "sum"), UNID=("UNID", "sum")
+    ).reset_index()
 
     ultimo_mes = df_pivot.sort_values(["ANO", "MES"], ascending=False).iloc[0]
     ultimo_periodo = {"ano": int(ultimo_mes["ANO"]), "mes": int(ultimo_mes["MES"])}
@@ -236,6 +440,20 @@ def gerar_html():
     targets_fin = ler_targets_fin(PATH_TARGETS_FIN)
     sellout, ultimo_sellout = ler_sellout_gerencial(PATH_SELLOUT)
 
+    depara_ok = Path(PATH_DEPARA).exists()
+
+    # Mapeamento cliente_sellin -> TIPO_CLIENTE_FINAL
+    # Usado pelo JS pra identificar distribuidores no sell-out
+    # (matching aproximado entre nomes do sell-in e GRUPO_PAINEL do sell-out)
+    cliente_tipo_map = {}
+    for cli, tipo in df.groupby([COLS["CLIENTE"], COLS["TIPO_CLIENTE"]]).groups.keys():
+        if cli and tipo:
+            # Normaliza nome (UPPER + trim) pra facilitar lookup no JS
+            nome_norm = str(cli).strip().upper()
+            tipo_norm = str(tipo).strip().upper()
+            cliente_tipo_map[nome_norm] = tipo_norm
+    print(f"\nMapeamento cliente->tipo: {len(cliente_tipo_map)} clientes mapeados")
+
     template = Path(PATH_TEMPLATE).read_text(encoding="utf-8")
 
     timestamp = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -245,6 +463,7 @@ def gerar_html():
     targets_fin_json = json.dumps(targets_fin, ensure_ascii=False, default=str)
     sellout_json = json.dumps(sellout, ensure_ascii=False, default=str)
     ultimo_sellout_json = json.dumps(ultimo_sellout, ensure_ascii=False) if ultimo_sellout else "null"
+    cliente_tipo_json = json.dumps(cliente_tipo_map, ensure_ascii=False)
 
     print(f"\nJSON sell-in: {len(dados_json)/1024:.1f} KB")
     print(f"JSON sell-out: {len(sellout_json)/1024:.1f} KB")
@@ -266,7 +485,9 @@ def gerar_html():
         f"window.__ALCON_TARGETS_FIN_EMBED__ = {targets_fin_json};\n"
         f"window.__ALCON_SELLOUT_EMBED__ = {sellout_json};\n"
         f"window.__ALCON_SELLOUT_ULTIMO__ = {ultimo_sellout_json};\n"
-        f"window.__ALCON_META_EMBED__ = {{ registros: {len(df)}, sellout_registros: {len(sellout)}, timestamp: \"{timestamp}\" }};\n"
+        f"window.__ALCON_CLIENTE_TIPO_MAP__ = {cliente_tipo_json};\n"
+        f"window.__ALCON_DEPARA_OK__ = {str(depara_ok).lower()};\n"
+        f"window.__ALCON_META_EMBED__ = {{ registros: {len(df)}, sellout_registros: {len(sellout)}, depara_ok: {str(depara_ok).lower()}, timestamp: \"{timestamp}\" }};\n"
         f"{marcador}"
     )
     template = template.replace(marcador, script_injecao, 1)
@@ -286,6 +507,8 @@ def gerar_html():
         "if(window.__ALCON_TARGETS_FIN_EMBED__){targetsFinanceiros = window.__ALCON_TARGETS_FIN_EMBED__;}"
         "if(window.__ALCON_SELLOUT_EMBED__){rawDataSellout = window.__ALCON_SELLOUT_EMBED__.map(function(r){return Object.assign({},r,{ANO:+r.ANO,MES:+r.MES,BRL:+r.BRL||0,UNID:+r.UNID||0});});}"
         "if(window.__ALCON_SELLOUT_ULTIMO__){selloutUltimoPeriodo = window.__ALCON_SELLOUT_ULTIMO__;}"
+        "if(window.__ALCON_CLIENTE_TIPO_MAP__){window.__clienteTipoMap = window.__ALCON_CLIENTE_TIPO_MAP__;}"
+        "if(window.__ALCON_DEPARA_OK__ === false && rawDataSellout && rawDataSellout.length > 0){var b=document.getElementById('deparaBanner');if(b)b.style.display='block';}"
     )
     novo_template2, n2 = padrao_init.subn(init_novo, template, count=1)
 

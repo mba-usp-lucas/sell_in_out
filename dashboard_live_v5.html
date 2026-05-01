@@ -519,6 +519,10 @@
   ⚠️ <b>Modo demonstração</b> — dados fictícios com 3 métricas: <code>Vendas_Unid</code>, <code>Vendas_BRL</code>, <code>Vendas_USD</code>.
 </div>
 
+<div class="depara-banner" id="deparaBanner" style="display:none;background:#FEF3C7;color:#92400e;padding:10px 32px;font-size:13px;border-bottom:1px solid #fde68a;">
+  ⚠️ <b>De-Para de produtos não configurado</b> — sell-out usa match aproximado (<i>fuzzy</i>) e pode ter gaps de cruzamento. Para análise 100% acurada, configure o arquivo <code>DePara_Produtos.xlsx</code>. Veja <code>produtos_nao_mapeados.csv</code> gerado pelo Python.
+</div>
+
 <div class="container">
 
   <div class="filters-wrapper collapsible collapsed" id="filtersCard">
@@ -632,6 +636,7 @@
     <button class="btn btn-outline" onclick="resetFilters()">🔄 Limpar Filtros</button>
     <button class="btn btn-outline" onclick="expandirTodos()" title="Reabre todos os cards e limpa preferências salvas">🔽 Expandir Todos</button>
     <button class="btn btn-outline" onclick="exportInsights()">📥 Exportar Insights</button>
+    <button class="btn btn-outline" onclick="exportOnePager()" id="btnOnePager" title="One-Pager Executivo · 1 slide A4">📄 One-Pager</button>
     <button class="btn" onclick="exportPPTX()" id="btnPptx">📊 Exportar PowerPoint</button>
   </div>
 
@@ -642,6 +647,9 @@
     <button type="button" class="nav-link" onclick="scrollToSection('resumoCard')">📋 Resumo Redes</button>
     <button type="button" class="nav-link" onclick="scrollToSection('comparativoCard')">🔄 SI × SO</button>
     <button type="button" class="nav-link" onclick="scrollToSection('insightsCard')">💡 Insights</button>
+    <button type="button" class="nav-link" onclick="scrollToSection('associacaoCard')">🏥 Assoc.</button>
+    <button type="button" class="nav-link" onclick="scrollToSection('decompCard')">📊 Decomp.</button>
+    <button type="button" class="nav-link" onclick="scrollToSection('planoAcaoCard')">🎯 Ações</button>
     <button type="button" class="nav-link" onclick="scrollToSection('chartYoYCard')">📈 Evolução</button>
     <button type="button" class="nav-link" onclick="scrollToSection('targetsCard')">🎯 Targets</button>
     <button type="button" class="nav-link" onclick="scrollToSection('tab-clientes')">🏢 Top 15</button>
@@ -698,6 +706,35 @@
   <div class="insights collapsible" id="insightsCard">
     <h3 onclick="toggleSection('insightsCard')">💡 Insights Automáticos <span class="toggle-icon">▼</span></h3>
     <div class="collapsible-body"><ul id="insightsList"></ul></div>
+  </div>
+
+  <!-- CARD DE DIAGNÓSTICO POR ASSOCIAÇÃO -->
+  <div class="card collapsible" id="associacaoCard" style="display:none">
+    <h3 onclick="toggleSection('associacaoCard')">🏥 Diagnóstico por Associação <span style="font-size:11px;font-weight:300;color:var(--ink-muted);margin-left:auto" id="associacaoAviso"></span> <span class="toggle-icon">▼</span></h3>
+    <div class="collapsible-body">
+      <div id="associacaoResumo" style="margin-bottom:14px"></div>
+      <div id="associacaoTabela"></div>
+    </div>
+  </div>
+
+  <!-- CARD DE DECOMPOSIÇÃO PREÇO × VOLUME × MIX -->
+  <div class="card collapsible" id="decompCard" style="display:none">
+    <h3 onclick="toggleSection('decompCard')">📊 Decomposição de Crescimento · Volume × Preço × Mix <span style="font-size:11px;font-weight:300;color:var(--ink-muted);margin-left:auto" id="decompAviso"></span> <span class="toggle-icon">▼</span></h3>
+    <div class="collapsible-body">
+      <div id="decompResumo" style="margin-bottom:16px"></div>
+      <div id="decompPorProduto"></div>
+    </div>
+  </div>
+
+  <!-- CARD DE PLANO DE AÇÃO -->
+  <div class="card collapsible" id="planoAcaoCard" style="display:none">
+    <h3 onclick="toggleSection('planoAcaoCard')">🎯 Plano de Ação · Prioridades baseadas em tendência, gap e cruzamento SI×SO <span style="font-size:11px;font-weight:300;color:var(--ink-muted);margin-left:auto" id="planoAcaoAviso"></span> <span class="toggle-icon">▼</span></h3>
+    <div class="collapsible-body">
+      <div id="planoAcaoResumo" style="margin-bottom:16px"></div>
+      <div id="planoAcaoCriticos"></div>
+      <div id="planoAcaoAtencao" style="margin-top:14px"></div>
+      <div id="planoAcaoOportunidades" style="margin-top:14px"></div>
+    </div>
   </div>
 
   <!-- CARD DE STATUS DE TARGETS - Unificado SI + SO -->
@@ -1038,6 +1075,85 @@ function produtoBateFiltro(produtoSO, produtoSetNorm){
 }
 
 // ============================================================
+// CANAL CONTEXTUAL - Sell-out Pharma vs Todos canais
+// ============================================================
+// Lógica:
+//   - Default: filtra apenas "farmacia" (CHAN_DESC contém 'farmacia')
+//   - Se cliente é Distribuidor (TIPO_CLIENTE_FINAL = DISTRIBUIDOR no sell-in):
+//       traz TODOS os canais (Pharma + Hospitalar + Outros)
+//   - Se TIPO_CLIENTE filtrado for Distribuidor: idem
+//
+// Função: clienteEhDistribuidor(nomeCliente) → bool
+function clienteEhDistribuidor(nomeCliente){
+  if(!nomeCliente) return false;
+  const map = window.__clienteTipoMap;
+  if(!map) return false;
+  const norm = String(nomeCliente).trim().toUpperCase();
+  // Tenta match exato
+  if(map[norm] && map[norm].includes('DISTRIBUIDOR')) return true;
+  // Match parcial - alguns nomes do sell-out diferem do sell-in
+  for(const [nomeSI, tipo] of Object.entries(map)){
+    if(!tipo.includes('DISTRIBUIDOR')) continue;
+    // Se nome do SO contém nome do SI ou vice-versa
+    if(norm.includes(nomeSI) || nomeSI.includes(norm)) return true;
+    // Match por palavras-chave fortes (Profarma, Santa Cruz, etc.)
+    const palavrasSI = nomeSI.split(/\s+/).filter(p => p.length >= 5);
+    for(const palavra of palavrasSI){
+      if(norm.includes(palavra)) return true;
+    }
+  }
+  return false;
+}
+
+// Verifica se o filtro atual aponta para Distribuidor
+// (verifica filtro de TIPO_CLIENTE selecionado)
+function filtroAtualEhDistribuidor(){
+  if(!tiposClienteSelecionados || tiposClienteSelecionados.length === 0) return false;
+  return tiposClienteSelecionados.some(t => String(t).toUpperCase().includes('DISTRIBUIDOR'));
+}
+
+// Decide se deve trazer TODOS os canais ou só Pharma
+// Retorna true = todos canais ; false = só Pharma
+function deveTrazerTodosCanais(nomeCliente){
+  // 1. Se filtro TIPO = Distribuidor: todos canais
+  if(filtroAtualEhDistribuidor()) return true;
+  // 2. Se cliente específico passado é distribuidor: todos canais
+  if(nomeCliente && clienteEhDistribuidor(nomeCliente)) return true;
+  // 3. Default: só Pharma
+  return false;
+}
+
+// Filtra um registro de sell-out por canal, considerando contexto
+// Retorna true se o registro DEVE entrar no agregado
+function selloutCanalOk(registro, nomeClienteContexto){
+  // Se o registro não tem CHAN_DESC, mantém (compatibilidade)
+  if(!registro.CHAN_DESC) return true;
+  const canal = String(registro.CHAN_DESC).toLowerCase();
+
+  // Decide com base no cliente daquele registro (não do filtro!)
+  // Se aquela linha é de um distribuidor → aceita qualquer canal
+  // Se NÃO é distribuidor → aceita só farmácia
+  const ehDistribuidor = clienteEhDistribuidor(registro.GRUPO_PAINEL) ||
+                          (filtroAtualEhDistribuidor() && nomeClienteContexto && clienteEhDistribuidor(nomeClienteContexto));
+  if(ehDistribuidor) return true;
+
+  // Não-distribuidor: só farmácia
+  return canal.includes('farmacia') || canal.includes('farmácia');
+}
+
+// Helper: itera sell-out aplicando filtro de canal contextual
+// Substitui o pattern: for(const r of rawDataSellout) { ... }
+// Use: forEachSellout((r) => { ... })  com mesma assinatura
+function forEachSellout(callback){
+  if(!rawDataSellout) return;
+  for(const r of rawDataSellout){
+      if(!selloutCanalOk(r)) continue;
+    if(!selloutCanalOk(r)) continue;
+    callback(r);
+  }
+}
+
+// ============================================================
 // DADOS DE EXEMPLO (3 colunas separadas)
 // ============================================================
 function gerarDadosExemplo(){
@@ -1098,28 +1214,32 @@ function gerarDadosExemplo(){
   return dados;
 }
 
-// GERADOR SELL-OUT FICTICIO (live)
+// GERADOR SELL-OUT FICTICIO (live) - inclui ASSOCIACAO + CHAN_DESC
 function gerarSelloutExemplo(){
   const redes = [
-    {nome:'GRUPO RAIA DROGASIL', tipo:'2.REDE'},{nome:'PAGUE MENOS', tipo:'2.REDE'},
-    {nome:'DPSP DROGARIAS', tipo:'2.REDE'},{nome:'SANTA CRUZ FARMA', tipo:'2.REDE'},
-    {nome:'PROFARMA DIST', tipo:'2.REDE'},{nome:'PANVEL', tipo:'2.REDE'},
-    {nome:'DROGARIA NISSEI', tipo:'2.REDE'},
-    {nome:'INDEPENDENTE SP', tipo:'1.INDEPENDENTE'},
-    {nome:'INDEPENDENTE NE', tipo:'1.INDEPENDENTE'}
+    {nome:'GRUPO RAIA DROGASIL', tipo:'2.REDE', assoc:'ABRAFARMA'},
+    {nome:'PAGUE MENOS', tipo:'2.REDE', assoc:'ABRAFARMA'},
+    {nome:'DPSP DROGARIAS', tipo:'2.REDE', assoc:'ABRAFARMA'},
+    {nome:'PROFARMA DIST', tipo:'3.DISTRIBUIDOR', assoc:'INDEPENDENTE'},
+    {nome:'SANTA CRUZ FARMA', tipo:'3.DISTRIBUIDOR', assoc:'INDEPENDENTE'},
+    {nome:'PANVEL', tipo:'2.REDE', assoc:'FEBRAFAR'},
+    {nome:'DROGARIA NISSEI', tipo:'2.REDE', assoc:'AFE'},
+    {nome:'INDEPENDENTE SP', tipo:'1.INDEPENDENTE', assoc:'INDEPENDENTE'},
+    {nome:'INDEPENDENTE NE', tipo:'1.INDEPENDENTE', assoc:'INDEPENDENTE'}
   ];
   const produtosSO = [
-    {n:'CLARIL (ALC)', fr:'PHARMA', brl:48, gap:0.15},
-    {n:'SYSTANE ULTRA (ALC)', fr:'PHARMA', brl:42, gap:0.10},
-    {n:'SYSTANE COMPLETE (ALC)', fr:'PHARMA', brl:50, gap:0.18},
-    {n:'PATADAY (ALC)', fr:'PHARMA', brl:80, gap:-0.05},
-    {n:'MAXIDEX (ALC)', fr:'PHARMA', brl:36, gap:0.05},
-    {n:'TOBRADEX (ALC)', fr:'PHARMA', brl:40, gap:0.20},
-    {n:'PRED FORTE (ALC)', fr:'PHARMA', brl:52, gap:0.25},
-    {n:'TRAVATAN Z (ALC)', fr:'PHARMA', brl:115, gap:-0.10},
-    {n:'TOTAL 30 (ALC)', fr:'LENTES', brl:175, gap:0.12},
-    {n:'DAILIES TOTAL1 (ALC)', fr:'LENTES', brl:215, gap:0.08}
+    {n:'CLARIL', fr:'PHARMA', brl:48, gap:0.15},
+    {n:'SYSTANE ULTRA', fr:'PHARMA', brl:42, gap:0.10},
+    {n:'SYSTANE COMPLETE', fr:'PHARMA', brl:50, gap:0.18},
+    {n:'PATADAY', fr:'PHARMA', brl:80, gap:-0.05},
+    {n:'MAXIDEX', fr:'PHARMA', brl:36, gap:0.05},
+    {n:'TOBRADEX', fr:'PHARMA', brl:40, gap:0.20},
+    {n:'PRED FORTE', fr:'PHARMA', brl:52, gap:0.25},
+    {n:'TRAVATAN Z', fr:'PHARMA', brl:115, gap:-0.10},
+    {n:'TOTAL 30', fr:'LENTES', brl:175, gap:0.12},
+    {n:'DAILIES TOTAL1', fr:'LENTES', brl:215, gap:0.08}
   ];
+  const canais = ['Farmacia', 'Hospitalar', 'Outros canais'];
   let seed = 17;
   const rand = () => {seed=(seed*9301+49297)%233280;return seed/233280;};
   const dados = [];
@@ -1132,13 +1252,20 @@ function gerarSelloutExemplo(){
           const tamanhoRede = (10 - idxRede) * 0.15 + 0.5;
           const sazonalidade = 1 + 0.25*Math.sin((mes-1)*Math.PI/6);
           const crescimentoSO = 1 + (ano-2024)*(0.05 + prod.gap) + (rand()-0.5)*0.10;
-          const baseUnid = (200 + rand()*800) * tamanhoRede * sazonalidade * crescimentoSO;
-          const unid = Math.round(baseUnid);
-          if(unid <= 0) return;
-          dados.push({
-            GRUPO_PAINEL: rede.nome, FRANQUIA: prod.fr, TIPO_CLIENTE: rede.tipo,
-            PRODUTO: prod.n, ANO: ano, MES: mes,
-            BRL: Math.round(unid * prod.brl), UNID: unid
+          // Distribuidores têm dados em 3 canais
+          const ehDist = rede.tipo === '3.DISTRIBUIDOR';
+          const canaisRede = ehDist ? canais : ['Farmacia'];
+          canaisRede.forEach(canal => {
+            const fatorCanal = canal === 'Farmacia' ? 1 : (canal === 'Hospitalar' ? 0.4 : 0.2);
+            const baseUnid = (200 + rand()*800) * tamanhoRede * sazonalidade * crescimentoSO * fatorCanal;
+            const unid = Math.round(baseUnid);
+            if(unid <= 0) return;
+            dados.push({
+              GRUPO_PAINEL: rede.nome, FRANQUIA: prod.fr, TIPO_CLIENTE: rede.tipo,
+              PRODUTO: prod.n, ANO: ano, MES: mes,
+              CHAN_DESC: canal, ASSOCIACAO: rede.assoc,
+              BRL: Math.round(unid * prod.brl), UNID: unid
+            });
           });
         });
       });
@@ -1602,6 +1729,7 @@ function abrirRangePicker(){
   // Inclui também anos do sell-out se disponível
   if(rawDataSellout && rawDataSellout.length > 0){
     for(const r of rawDataSellout){
+      if(!selloutCanalOk(r)) continue;
       const a = +r.ANO;
       if(a) anosSet.add(a);
     }
@@ -2078,6 +2206,9 @@ function renderizarTudo(){
   renderResumo(per);  // Card resumo - sempre filtra sem cliente
   renderComparativo(per);  // Card análise comparativa sell-in x sell-out
   renderInsights(base, per);
+  renderAssociacao(per);
+  renderDecomposicao(base, per);
+  renderPlanoAcao(base, per);
   renderBenchmark(per);
   renderTargets(base, per);
   renderTargetsFinanceiros(base, per);
@@ -2089,6 +2220,928 @@ function renderizarTudo(){
   renderTopProdutos(base, per);
   renderCrescimentoQueda(base, per);
 }
+
+// ============================================================
+// DECOMPOSIÇÃO PREÇO × VOLUME × MIX
+// Mostra de onde veio o crescimento: aumento de preço, mais unidades vendidas, ou mudança de mix.
+// Só faz sentido em métricas de RECEITA (BRL/USD), não em UNID.
+// ============================================================
+function renderDecomposicao(data, per){
+  const card = document.getElementById('decompCard');
+  const resumo = document.getElementById('decompResumo');
+  const porProd = document.getElementById('decompPorProduto');
+  const aviso = document.getElementById('decompAviso');
+
+  // 1. Só faz sentido em métricas de receita
+  if(metricaAtual === 'UNID'){
+    card.style.display = 'block';
+    aviso.textContent = '⚠️ Decomposição requer métrica de receita';
+    resumo.innerHTML = `<div style="background:#FEF3C7;color:#92400E;padding:14px;border-radius:8px;border-left:4px solid #F59E0B">
+      <b>Decomposição não disponível em Unidades.</b><br>
+      <span style="font-size:13px">A análise de Volume × Preço × Mix requer métrica de receita (BRL ou USD).
+      Troque a métrica no topo da tela para ver esta análise.</span>
+    </div>`;
+    porProd.innerHTML = '';
+    return;
+  }
+
+  // 2. Agregar por produto+cliente: BRL e UNID separados (em cada período)
+  // Estrutura: agg[produto][cliente] = {brlAtual, unidAtual, brlComp, unidComp}
+  const periodoAtualSet = new Set(per.periodoAtual.map(p => `${p.ano}-${p.mes}`));
+  const periodoCompSet = new Set(per.periodoComp.map(p => `${p.ano}-${p.mes}`));
+
+  const agg = {};
+  for(const r of data){
+    const k = `${r[COLS.ANO]}-${r[COLS.MES_NUM]}`;
+    const isAtual = periodoAtualSet.has(k);
+    const isComp = periodoCompSet.has(k);
+    if(!isAtual && !isComp) continue;
+    const prod = r[COLS.PRODUTO] || '—';
+    const cli = r[COLS.CLIENTE] || '—';
+    const brl = +r[COLS.VALOR_BRL] || 0;
+    const usd = +r[COLS.VALOR_USD] || 0;
+    const unid = +r[COLS.VALOR_UNID] || 0;
+    const valor = metricaAtual === 'BRL' ? brl : usd;
+    if(!agg[prod]) agg[prod] = {};
+    if(!agg[prod][cli]) agg[prod][cli] = {valAtual:0, unidAtual:0, valComp:0, unidComp:0};
+    if(isAtual){ agg[prod][cli].valAtual += valor; agg[prod][cli].unidAtual += unid; }
+    if(isComp){ agg[prod][cli].valComp += valor; agg[prod][cli].unidComp += unid; }
+  }
+
+  // 3. Calcular decomposição (DECOMPOSIÇÃO CLÁSSICA - padrão de mercado)
+  //
+  // ----- POR PRODUTO (decomposição interna do produto: cliente×preço×volume) -----
+  // ΔV_prod = Σ_cliente (Qa - Qc) × Pc
+  // ΔP_prod = Σ_cliente (Pa - Pc) × Qa
+  // ΔMix_prod = resíduo (mix entre clientes do mesmo produto)
+  //
+  // ----- TOTAL AGREGADO (decomposição entre produtos) -----
+  // ΔP_total = Σ_produto (Pa_prod - Pc_prod) × Qa_prod   [preço puro por produto]
+  // ΔV_total = (Q_total_a - Q_total_c) × P_médio_global_c   [volume puro]
+  // ΔMix_total = ΔReceita - ΔV_total - ΔP_total   [resíduo: captura mix entre produtos]
+  //
+  // Vender mais do produto caro vs barato é classificado como Mix (não Preço)
+  // Resolve o "paradoxo de Simpson"
+  const decompPorProduto = {};
+  let totalAtual = 0, totalComp = 0;
+  let unidTotalAtual = 0, unidTotalComp = 0;
+  let totalLancamentos = 0;
+  let totalDescontinuados = 0;
+
+  for(const prod of Object.keys(agg)){
+    let prodAtual = 0, prodComp = 0;
+    let prodVolume = 0, prodPreco = 0, prodMix = 0;
+    let unidAtualProd = 0, unidCompProd = 0;
+    let temAtualProd = false, temCompProd = false;
+
+    for(const cli of Object.keys(agg[prod])){
+      const c = agg[prod][cli];
+      const Qa = c.unidAtual, Qc = c.unidComp;
+      const Va = c.valAtual, Vc = c.valComp;
+      const Pa = Qa > 0 ? Va / Qa : 0;
+      const Pc = Qc > 0 ? Vc / Qc : 0;
+
+      prodAtual += Va;
+      prodComp += Vc;
+      unidAtualProd += Qa;
+      unidCompProd += Qc;
+      if(Va > 0) temAtualProd = true;
+      if(Vc > 0) temCompProd = true;
+
+      // Decomposição interna do produto (cliente × preço × volume)
+      if(Qc > 0 && Qa > 0){
+        const dv = (Qa - Qc) * Pc;
+        const dp = (Pa - Pc) * Qa;
+        const dMix = (Va - Vc) - dv - dp;
+        prodVolume += dv;
+        prodPreco += dp;
+        prodMix += dMix;
+      } else if(Qa > 0 && Qc === 0){
+        prodVolume += Va;
+      } else if(Qa === 0 && Qc > 0){
+        prodVolume += -Vc;
+      }
+    }
+
+    decompPorProduto[prod] = {
+      atual: prodAtual,
+      comp: prodComp,
+      delta: prodAtual - prodComp,
+      volume: prodVolume,
+      preco: prodPreco,
+      mix: prodMix,
+      precoMedioAtual: unidAtualProd > 0 ? prodAtual / unidAtualProd : 0,
+      precoMedioComp: unidCompProd > 0 ? prodComp / unidCompProd : 0,
+      unidAtual: unidAtualProd,
+      unidComp: unidCompProd,
+      lancamento: temAtualProd && !temCompProd,
+      descontinuado: !temAtualProd && temCompProd,
+    };
+
+    totalAtual += prodAtual;
+    totalComp += prodComp;
+    unidTotalAtual += unidAtualProd;
+    unidTotalComp += unidCompProd;
+    if(decompPorProduto[prod].lancamento) totalLancamentos += prodAtual;
+    if(decompPorProduto[prod].descontinuado) totalDescontinuados += prodComp;
+  }
+
+  // ----- DECOMPOSIÇÃO AGREGADA (CLÁSSICA) -----
+  // Preço puro: efeito de mudança de preço POR PRODUTO (sem efeito de mix)
+  let totalPreco = 0;
+  for(const prod of Object.keys(decompPorProduto)){
+    const p = decompPorProduto[prod];
+    if(p.unidAtual > 0 && p.unidComp > 0){
+      totalPreco += (p.precoMedioAtual - p.precoMedioComp) * p.unidAtual;
+    }
+  }
+  // Volume: mudança no volume total ao preço médio global do comp
+  const pMedioGlobalComp = unidTotalComp > 0 ? totalComp / unidTotalComp : 0;
+  const totalVolume = (unidTotalAtual - unidTotalComp) * pMedioGlobalComp;
+  // Mix: resíduo (captura efeito de mudar mix entre produtos)
+  const totalMix = (totalAtual - totalComp) - totalVolume - totalPreco;
+
+  // 4. Renderizar resumo agregado (waterfall)
+  card.style.display = 'block';
+  aviso.textContent = `· ${metricaAtual} · ${per.labelAtual} vs ${per.labelComp || '—'}`;
+
+  const deltaTotal = totalAtual - totalComp;
+  const pctTotal = totalComp > 0 ? (deltaTotal / totalComp * 100) : 0;
+  const corDelta = deltaTotal >= 0 ? '#059669' : '#DC2626';
+  const setaDelta = deltaTotal >= 0 ? '▲' : '▼';
+
+  // Para o waterfall: módulos absolutos para %
+  const totalAbs = Math.abs(totalVolume) + Math.abs(totalPreco) + Math.abs(totalMix);
+  const pctV = totalAbs > 0 ? (Math.abs(totalVolume) / totalAbs * 100) : 0;
+  const pctP = totalAbs > 0 ? (Math.abs(totalPreco) / totalAbs * 100) : 0;
+  const pctM = totalAbs > 0 ? (Math.abs(totalMix) / totalAbs * 100) : 0;
+
+  function corBarra(v){ return v >= 0 ? '#10B981' : '#EF4444'; }
+  function fmtMoeda(v){ return (v >= 0 ? '+' : '-') + 'R$ ' + Math.abs(v).toLocaleString('pt-BR', {maximumFractionDigits:0}); }
+
+  // Insight automático em prosa - mais rico, com interpretação
+  const maiorEfeito = Math.abs(totalVolume) >= Math.abs(totalPreco) && Math.abs(totalVolume) >= Math.abs(totalMix) ? 'Volume' :
+                       Math.abs(totalPreco) >= Math.abs(totalMix) ? 'Preço' : 'Mix';
+  const direcao = deltaTotal >= 0 ? 'crescimento' : 'queda';
+
+  // Explicação contextual de cada driver
+  let explicacao = '';
+  if(maiorEfeito === 'Volume'){
+    const sentido = totalVolume >= 0 ? 'mais unidades vendidas' : 'menos unidades vendidas';
+    explicacao = ` Significa que o movimento veio principalmente de <b>${sentido}</b>, sem mudança relevante de preço médio ou de mix de produtos.`;
+  } else if(maiorEfeito === 'Preço'){
+    const sentido = totalPreco >= 0 ? 'preços maiores' : 'preços menores';
+    explicacao = ` Significa que houve <b>${sentido}</b> nos produtos individualmente (preço médio por SKU subiu/caiu).`;
+  } else {
+    const sentido = totalMix >= 0 ? 'produtos mais caros ganhando peso' : 'produtos mais caros perdendo peso';
+    explicacao = ` Significa que o portfólio mudou: <b>${sentido}</b> nas vendas — o preço unitário não mudou, mas a composição sim.`;
+  }
+
+  // Aviso se preço médio total é estável (todos produtos com preço fixo = 100% volume esperado)
+  const pMedioGlobalAtual = unidTotalAtual > 0 ? totalAtual / unidTotalAtual : 0;
+  const variacaoPrecoGlobal = pMedioGlobalComp > 0 ? Math.abs(pMedioGlobalAtual - pMedioGlobalComp) / pMedioGlobalComp * 100 : 0;
+  let avisoExtra = '';
+  if(variacaoPrecoGlobal < 1 && Math.abs(pctV) > 95){
+    avisoExtra = ` <span style="color:#92400E;font-size:11px"><br>⚠️ Preço médio global praticamente igual (${pMedioGlobalComp.toFixed(2)} → ${pMedioGlobalAtual.toFixed(2)}). Isso é esperado quando preços tabelados não variaram.</span>`;
+  }
+
+  const insightTxt = `<b>${maiorEfeito}</b> é o principal driver d${deltaTotal >= 0 ? 'o' : 'a'} ${direcao} (${pctV.toFixed(0)}% volume · ${pctP.toFixed(0)}% preço · ${pctM.toFixed(0)}% mix).${explicacao}${avisoExtra}`;
+
+  resumo.innerHTML = `
+    <div style="background:linear-gradient(135deg,#EBF4FB 0%,#D1E5F4 100%);padding:18px;border-radius:12px;border-left:4px solid var(--alcon-blue);margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:12px;color:#64748B;text-transform:uppercase;font-weight:700;letter-spacing:0.5px">Δ Total</div>
+          <div style="font-size:32px;font-weight:800;color:${corDelta};line-height:1">${setaDelta} ${fmtMoeda(deltaTotal)}</div>
+          <div style="font-size:14px;color:${corDelta};font-weight:700">${pctTotal >= 0 ? '+' : ''}${pctTotal.toFixed(1)}%</div>
+        </div>
+        <div style="font-size:13px;color:#1e3a5f;line-height:1.5;flex:1;min-width:280px">
+          ${insightTxt}
+        </div>
+      </div>
+    </div>
+    <div style="background:#fff;padding:18px;border-radius:12px;border:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:14px">Decomposição</div>
+      ${decomposicaoBarra('Volume', totalVolume, totalAbs, '#10B981', '#FEE2E2', 'Mais ou menos unidades vendidas no total, valoradas ao preço médio do período comparado')}
+      ${decomposicaoBarra('Preço', totalPreco, totalAbs, '#3B82F6', '#FEE2E2', 'Mudança de preço médio dentro de cada produto (preços praticados subiram ou caíram)')}
+      ${decomposicaoBarra('Mix', totalMix, totalAbs, '#A855F7', '#FEE2E2', 'Mudança na composição: produtos mais caros ganharam ou perderam peso no total vendido')}
+      ${(totalLancamentos > 0 || totalDescontinuados > 0) ? `
+        <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #E5E7EB;font-size:12px;color:var(--ink-muted)">
+          ${totalLancamentos > 0 ? `<div>🆕 Lançamentos no período: ${fmtMoeda(totalLancamentos)} (sem base comp)</div>` : ''}
+          ${totalDescontinuados > 0 ? `<div>📦 Descontinuados: -${fmtMoeda(totalDescontinuados).replace('+','')} (sem venda atual)</div>` : ''}
+        </div>` : ''}
+    </div>
+  `;
+
+  // 5. Top produtos com decomposição
+  const topProdutos = Object.entries(decompPorProduto)
+    .filter(([_, p]) => !p.lancamento && !p.descontinuado && p.comp > 0)  // só produtos com base comparável
+    .sort((a, b) => Math.abs(b[1].delta) - Math.abs(a[1].delta))  // ordena por impacto absoluto
+    .slice(0, 10);
+
+  if(topProdutos.length > 0){
+    porProd.innerHTML = `
+      <div style="margin-top:16px">
+        <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:10px">📋 Top 10 produtos por impacto absoluto</div>
+        <div style="overflow-x:auto"><table class="targets-tabela" style="width:100%;font-size:12px">
+          <thead><tr>
+            <th>Produto</th>
+            <th class="num">Receita Atual</th>
+            <th class="num">Δ Total</th>
+            <th class="num">▲ Volume</th>
+            <th class="num">▲ Preço</th>
+            <th class="num">◆ Mix</th>
+            <th class="num" title="Variação de preço médio">Δ Preço Médio</th>
+          </tr></thead>
+          <tbody>
+            ${topProdutos.map(([nome, p]) => {
+              const dPctPreco = p.precoMedioComp > 0 ? ((p.precoMedioAtual - p.precoMedioComp) / p.precoMedioComp * 100) : 0;
+              return `<tr>
+                <td><b>${nome}</b></td>
+                <td class="num">${fmt(p.atual)}</td>
+                <td class="num"><b style="color:${p.delta >= 0 ? '#059669' : '#DC2626'}">${fmtMoeda(p.delta)}</b></td>
+                <td class="num"><span style="color:${p.volume >= 0 ? '#10B981' : '#EF4444'}">${fmtMoeda(p.volume)}</span></td>
+                <td class="num"><span style="color:${p.preco >= 0 ? '#3B82F6' : '#EF4444'}">${fmtMoeda(p.preco)}</span></td>
+                <td class="num"><span style="color:${p.mix >= 0 ? '#A855F7' : '#EF4444'}">${fmtMoeda(p.mix)}</span></td>
+                <td class="num" style="font-size:11px;color:var(--ink-muted)">
+                  ${p.precoMedioComp > 0 ? `${dPctPreco >= 0 ? '+' : ''}${dPctPreco.toFixed(1)}%` : '—'}
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table></div>
+      </div>
+    `;
+  } else {
+    porProd.innerHTML = '<div style="font-size:13px;color:var(--ink-muted);font-style:italic;margin-top:14px">Sem produtos com base comparável (atual + comp) para detalhamento.</div>';
+  }
+
+  // Salvar pra uso no PPT
+  window.__decompResultado = {
+    totalAtual, totalComp, deltaTotal, pctTotal,
+    totalVolume, totalPreco, totalMix,
+    totalLancamentos, totalDescontinuados,
+    porProduto: decompPorProduto,
+    topProdutos: topProdutos.map(([nome, p]) => ({nome, ...p}))
+  };
+}
+
+// Helper: renderiza uma barra horizontal da decomposição
+function decomposicaoBarra(label, valor, totalAbs, corPositiva, corNegativa, descricao){
+  const pct = totalAbs > 0 ? (Math.abs(valor) / totalAbs * 100) : 0;
+  const cor = valor >= 0 ? corPositiva : '#EF4444';
+  const sinal = valor >= 0 ? '▲' : '▼';
+  const fmtV = (valor >= 0 ? '+' : '-') + 'R$ ' + Math.abs(valor).toLocaleString('pt-BR', {maximumFractionDigits:0});
+  return `
+    <div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+        <span style="font-size:13px;font-weight:700;color:${cor}">${sinal} ${label}: ${fmtV}</span>
+        <span style="font-size:11px;color:var(--ink-muted)">${pct.toFixed(0)}% do efeito total</span>
+      </div>
+      <div style="background:#F3F4F6;border-radius:6px;height:10px;overflow:hidden">
+        <div style="background:${cor};height:100%;width:${Math.min(100, pct)}%;border-radius:6px;transition:width 0.3s"></div>
+      </div>
+      <div style="font-size:11px;color:var(--ink-muted);margin-top:2px">${descricao}</div>
+    </div>
+  `;
+}
+
+
+// ============================================================
+// DIAGNÓSTICO POR ASSOCIAÇÃO
+// Mostra performance segmentada por associação (ABRAFARMA, FEBRAFAR, etc.)
+// Usa coluna ASSOCIACAO do sell-out
+// ============================================================
+function renderAssociacao(per){
+  const card = document.getElementById('associacaoCard');
+  const aviso = document.getElementById('associacaoAviso');
+  const resumoDiv = document.getElementById('associacaoResumo');
+  const tabelaDiv = document.getElementById('associacaoTabela');
+
+  if(!rawDataSellout || rawDataSellout.length === 0){
+    card.style.display = 'none';
+    return;
+  }
+
+  // Verificar se tem coluna ASSOCIACAO
+  const temAssoc = rawDataSellout.some(r => r.ASSOCIACAO);
+  if(!temAssoc){
+    card.style.display = 'none';
+    return;
+  }
+
+  card.style.display = 'block';
+
+  // Período sell-out (M-2 ajustado)
+  const ultMesSO = selloutUltimoPeriodo;
+  if(!ultMesSO){
+    aviso.textContent = '⚠️ Sell-out não disponível';
+    return;
+  }
+  function temNoSO(p){
+    return (p.ano < ultMesSO.ano) || (p.ano === ultMesSO.ano && p.mes <= ultMesSO.mes);
+  }
+  let perAtualSO = per.periodoAtual.filter(temNoSO);
+  let perCompSO = perAtualSO.map(p => ({ano: p.ano - 1, mes: p.mes}));
+  if(perAtualSO.length === 0){
+    perAtualSO = [{ano: ultMesSO.ano, mes: ultMesSO.mes}];
+    perCompSO = [{ano: ultMesSO.ano - 1, mes: ultMesSO.mes}];
+  }
+  const setAtualSO = new Set(perAtualSO.map(p => `${p.ano}-${p.mes}`));
+  const setCompSO = new Set(perCompSO.map(p => `${p.ano}-${p.mes}`));
+
+  const labelAtualSO = perAtualSO.length === 1
+    ? `${MESES_NOME[perAtualSO[0].mes-1]}/${perAtualSO[0].ano}`
+    : `${MESES_NOME[perAtualSO[0].mes-1]}/${perAtualSO[0].ano} a ${MESES_NOME[perAtualSO[perAtualSO.length-1].mes-1]}/${perAtualSO[perAtualSO.length-1].ano}`;
+  const labelCompSO = perCompSO.length === 1
+    ? `${MESES_NOME[perCompSO[0].mes-1]}/${perCompSO[0].ano}`
+    : `${MESES_NOME[perCompSO[0].mes-1]}/${perCompSO[0].ano} a ${MESES_NOME[perCompSO[perCompSO.length-1].mes-1]}/${perCompSO[perCompSO.length-1].ano}`;
+
+  aviso.textContent = `· ${labelAtualSO} vs ${labelCompSO} · ${metricaAtual}`;
+
+  // Filtros
+  const franquiasSetA = franquiasSelecionadas.length ? new Set(franquiasSelecionadas) : null;
+  const tipoSetA = tiposClienteSelecionados.length ? new Set(tiposClienteSelecionados) : null;
+  const produtoSetA = produtosSelecionados.length ? new Set(produtosSelecionados) : null;
+  const produtoSetNorm = produtoSetA ? construirSetProdutosNorm(produtoSetA) : null;
+
+  // Agregação por associação
+  const aggAssoc = {};
+
+  for(const r of rawDataSellout){
+    if(!selloutCanalOk(r)) continue;
+    if(franquiasSetA && !franquiasSetA.has(String(r.FRANQUIA))) continue;
+    if(tipoSetA && !tipoSetA.has(r.TIPO_CLIENTE)) continue;
+    if(produtoSetNorm && !produtoBateFiltro(r.PRODUTO, produtoSetNorm)) continue;
+
+    const assoc = r.ASSOCIACAO || '—';
+    const k = `${r.ANO}-${r.MES}`;
+    const v = metricaAtual === 'UNID' ? (+r.UNID || 0) : (+r.BRL || 0);
+
+    if(!aggAssoc[assoc]) aggAssoc[assoc] = {atual:0, comp:0, redes: new Set()};
+    if(setAtualSO.has(k)){
+      aggAssoc[assoc].atual += v;
+      aggAssoc[assoc].redes.add(r.GRUPO_PAINEL);
+    }
+    if(setCompSO.has(k)){
+      aggAssoc[assoc].comp += v;
+    }
+  }
+
+  // Lista ordenada por receita atual
+  const linhas = Object.keys(aggAssoc).map(assoc => {
+    const a = aggAssoc[assoc];
+    const dAbs = a.atual - a.comp;
+    const dPct = a.comp > 0 ? (dAbs / a.comp * 100) : 0;
+    return {
+      nome: assoc,
+      atual: a.atual,
+      comp: a.comp,
+      dAbs: dAbs,
+      dPct: dPct,
+      redes: a.redes.size
+    };
+  }).filter(l => l.atual > 0 || l.comp > 0).sort((a, b) => b.atual - a.atual);
+
+  if(linhas.length === 0){
+    resumoDiv.innerHTML = '<div style="color:var(--ink-muted);font-style:italic;padding:12px">Sem dados para o período/filtros selecionados.</div>';
+    tabelaDiv.innerHTML = '';
+    return;
+  }
+
+  // Total geral pra calcular share
+  const totalGeral = linhas.reduce((s, l) => s + l.atual, 0);
+
+  // Insight executivo
+  const top = linhas[0];
+  const negativos = linhas.filter(l => l.dPct < -2);
+  const positivos = linhas.filter(l => l.dPct > 2);
+
+  let insightTxt = '';
+  if(top){
+    insightTxt = `<b>${top.nome}</b> lidera com ${fmt(top.atual)} (${(top.atual/totalGeral*100).toFixed(0)}% do total) `;
+    if(top.dPct >= 0) insightTxt += `e cresce <b>+${top.dPct.toFixed(1)}%</b> vs YA.`;
+    else insightTxt += `mas recua <b>${top.dPct.toFixed(1)}%</b> vs YA.`;
+  }
+  if(positivos.length > 0 && negativos.length > 0){
+    insightTxt += ` ${positivos.length} associaç${positivos.length===1?'ão cresce':'ões crescem'} no período · ${negativos.length} ${negativos.length===1?'recua':'recuam'}.`;
+  }
+
+  resumoDiv.innerHTML = `
+    <div style="background:linear-gradient(135deg,#EBF4FB 0%,#D1E5F4 100%);padding:14px;border-radius:8px;border-left:4px solid var(--alcon-blue);font-size:13px;color:#1E3A5F;line-height:1.5">
+      ${insightTxt}
+    </div>
+  `;
+
+  // Tabela
+  let html = `
+    <div style="overflow-x:auto"><table class="targets-tabela" style="width:100%;font-size:12px;margin-top:8px">
+      <thead>
+        <tr>
+          <th style="text-align:left">Associação</th>
+          <th class="num">Redes</th>
+          <th class="num">Atual</th>
+          <th class="num">Comp</th>
+          <th class="num">Δ Abs</th>
+          <th class="num">Δ %</th>
+          <th class="num">Share</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+  linhas.forEach(l => {
+    const corDelta = l.dPct >= 0 ? '#059669' : '#DC2626';
+    const seta = l.dPct >= 0 ? '▲' : '▼';
+    const sinalAbs = l.dAbs >= 0 ? '+' : '-';
+    const share = totalGeral > 0 ? (l.atual / totalGeral * 100) : 0;
+    html += `
+      <tr>
+        <td><b style="color:#1E3A5F">${l.nome}</b></td>
+        <td class="num">${l.redes}</td>
+        <td class="num">${fmt(l.atual)}</td>
+        <td class="num" style="color:var(--ink-muted)">${fmt(l.comp)}</td>
+        <td class="num" style="color:${corDelta}"><b>${sinalAbs}${fmt(Math.abs(l.dAbs))}</b></td>
+        <td class="num" style="color:${corDelta}">
+          <b>${seta} ${l.dPct >= 0 ? '+' : ''}${l.dPct.toFixed(1)}%</b>
+        </td>
+        <td class="num">${share.toFixed(1)}%</td>
+      </tr>
+    `;
+  });
+  html += `</tbody></table></div>`;
+
+  tabelaDiv.innerHTML = html;
+
+  // Salva pra uso no PPT
+  window.__associacaoResultado = {linhas, totalGeral, labelAtualSO, labelCompSO};
+}
+
+
+// ============================================================
+// PLANO DE AÇÃO AUTOMATIZADO
+// Detecta padrões nos dados e gera prioridades classificadas em
+// 3 categorias: Crítico / Atenção / Oportunidade
+//
+// Score híbrido: 60% impacto + 30% urgência + 10% recuperabilidade
+// ============================================================
+function renderPlanoAcao(data, per){
+  const card = document.getElementById('planoAcaoCard');
+  const aviso = document.getElementById('planoAcaoAviso');
+  const resumoDiv = document.getElementById('planoAcaoResumo');
+  const criticosDiv = document.getElementById('planoAcaoCriticos');
+  const atencaoDiv = document.getElementById('planoAcaoAtencao');
+  const oportDiv = document.getElementById('planoAcaoOportunidades');
+
+  card.style.display = 'block';
+
+  // ============================================================
+  // 1. PREPARAR AGREGAÇÕES POR CLIENTE E PRODUTO
+  // ============================================================
+  const periodoAtualSet = new Set(per.periodoAtual.map(p => `${p.ano}-${p.mes}`));
+  const periodoCompSet = new Set(per.periodoComp.map(p => `${p.ano}-${p.mes}`));
+
+  // Agregação por cliente
+  const aggCli = {};
+  const aggProd = {};
+  // Para tendência, precisamos da série mensal dos últimos 6 meses
+  const seriesMensais = {};   // por cliente
+  const seriesProdutos = {};  // por produto
+
+  // Janela dos últimos 6 meses (a partir do ÚLTIMO mês do período atual)
+  const ultimoP = per.periodoAtual[per.periodoAtual.length - 1];
+  if(!ultimoP){ card.style.display = 'none'; return; }
+  const janelaMeses = [];
+  let m = ultimoP.mes, a = ultimoP.ano;
+  for(let i = 0; i < 6; i++){
+    janelaMeses.unshift({ano: a, mes: m});
+    m--; if(m < 1){ m = 12; a--; }
+  }
+  const janelaSet = new Set(janelaMeses.map(p => `${p.ano}-${p.mes}`));
+
+  for(const r of data){
+    const cli = r[COLS.CLIENTE] || '—';
+    const prod = r[COLS.PRODUTO] || '—';
+    const k = `${r[COLS.ANO]}-${r[COLS.MES_NUM]}`;
+    const v = getValor(r);
+
+    // Agregação atual×comp por cliente
+    if(!aggCli[cli]) aggCli[cli] = {atual:0, comp:0, brl:0};
+    if(!aggProd[prod]) aggProd[prod] = {atual:0, comp:0, brl:0, franquia: r[COLS.FRANQUIA]};
+    if(periodoAtualSet.has(k)){
+      aggCli[cli].atual += v;
+      aggCli[cli].brl += (+r[COLS.VALOR_BRL] || 0);
+      aggProd[prod].atual += v;
+      aggProd[prod].brl += (+r[COLS.VALOR_BRL] || 0);
+    }
+    if(periodoCompSet.has(k)){
+      aggCli[cli].comp += v;
+      aggProd[prod].comp += v;
+    }
+
+    // Série mensal dos últimos 6 meses
+    if(janelaSet.has(k)){
+      if(!seriesMensais[cli]) seriesMensais[cli] = {};
+      if(!seriesProdutos[prod]) seriesProdutos[prod] = {};
+      seriesMensais[cli][k] = (seriesMensais[cli][k] || 0) + v;
+      seriesProdutos[prod][k] = (seriesProdutos[prod][k] || 0) + v;
+    }
+  }
+
+  // Agregação por franquia (pra comparar produto vs benchmark)
+  const aggFranquia = {};
+  for(const prod of Object.keys(aggProd)){
+    const fr = aggProd[prod].franquia || '—';
+    if(!aggFranquia[fr]) aggFranquia[fr] = {atual:0, comp:0};
+    aggFranquia[fr].atual += aggProd[prod].atual;
+    aggFranquia[fr].comp += aggProd[prod].comp;
+  }
+
+  // ============================================================
+  // 2. AGREGAR SELL-OUT (se disponível)
+  // ============================================================
+  const aggCliSO = {};
+  const aggProdSO = {};
+  const temSellout = rawDataSellout && rawDataSellout.length > 0 && selloutUltimoPeriodo;
+  if(temSellout){
+    // Filtrar SO ao mesmo período (ajustando M-2)
+    const ultMesSO = selloutUltimoPeriodo;
+    function temNoSO(p){
+      return (p.ano < ultMesSO.ano) || (p.ano === ultMesSO.ano && p.mes <= ultMesSO.mes);
+    }
+    let perAtualSO = per.periodoAtual.filter(temNoSO);
+    let perCompSO = perAtualSO.map(p => ({ano: p.ano - 1, mes: p.mes}));
+    if(perAtualSO.length === 0){
+      perAtualSO = [{ano: ultMesSO.ano, mes: ultMesSO.mes}];
+      perCompSO = [{ano: ultMesSO.ano - 1, mes: ultMesSO.mes}];
+    }
+    const setAtualSO = new Set(perAtualSO.map(p => `${p.ano}-${p.mes}`));
+    const setCompSO = new Set(perCompSO.map(p => `${p.ano}-${p.mes}`));
+
+    const franquiasSetA = franquiasSelecionadas.length ? new Set(franquiasSelecionadas) : null;
+    const tipoSetA = tiposClienteSelecionados.length ? new Set(tiposClienteSelecionados) : null;
+    const produtoSetA = produtosSelecionados.length ? new Set(produtosSelecionados) : null;
+    const produtoSetNorm = produtoSetA ? construirSetProdutosNorm(produtoSetA) : null;
+
+    for(const r of rawDataSellout){
+      if(!selloutCanalOk(r)) continue;
+      if(franquiasSetA && !franquiasSetA.has(String(r.FRANQUIA))) continue;
+      if(tipoSetA && !tipoSetA.has(r.TIPO_CLIENTE)) continue;
+      if(produtoSetNorm && !produtoBateFiltro(r.PRODUTO, produtoSetNorm)) continue;
+      const k = `${r.ANO}-${r.MES}`;
+      const cli = r.GRUPO_PAINEL;
+      const prod = r.PRODUTO;
+      const v = metricaAtual === 'UNID' ? (+r.UNID || 0) : (+r.BRL || 0);
+      if(!aggCliSO[cli]) aggCliSO[cli] = {atual:0, comp:0, unid:0};
+      if(!aggProdSO[prod]) aggProdSO[prod] = {atual:0, comp:0, unid:0};
+      if(setAtualSO.has(k)){
+        aggCliSO[cli].atual += v;
+        aggProdSO[prod].atual += v;
+        aggCliSO[cli].unid += (+r.UNID || 0);
+        aggProdSO[prod].unid += (+r.UNID || 0);
+      }
+      if(setCompSO.has(k)){
+        aggCliSO[cli].comp += v;
+        aggProdSO[prod].comp += v;
+      }
+    }
+  }
+
+  // ============================================================
+  // 3. CALCULAR TENDÊNCIA (slope dos últimos 6 meses)
+  // ============================================================
+  function calcularSlope(serie){
+    // serie é {key: valor} — converter para array ordenado
+    const keys = Object.keys(serie).sort();
+    if(keys.length < 3) return {slope: 0, mesesQueda: 0, mesesAlta: 0, valores: []};
+    const valores = keys.map(k => serie[k]);
+    // Slope simples: regressão linear
+    const n = valores.length;
+    const sumX = n*(n-1)/2;
+    const sumY = valores.reduce((a,b) => a+b, 0);
+    const sumXY = valores.reduce((acc, y, i) => acc + i*y, 0);
+    const sumX2 = valores.reduce((acc, _, i) => acc + i*i, 0);
+    const slope = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
+
+    // Contar meses consecutivos de queda OU alta NO FINAL
+    let mesesQueda = 0, mesesAlta = 0;
+    for(let i = valores.length - 1; i > 0; i--){
+      if(valores[i] < valores[i-1]) mesesQueda++;
+      else break;
+    }
+    for(let i = valores.length - 1; i > 0; i--){
+      if(valores[i] > valores[i-1]) mesesAlta++;
+      else break;
+    }
+    return {slope, mesesQueda, mesesAlta, valores};
+  }
+
+  // ============================================================
+  // 4. GERAR LISTA DE AÇÕES
+  // ============================================================
+  const acoes = [];
+
+  // -------- Detector 1: Clientes em queda persistente --------
+  for(const cli of Object.keys(aggCli)){
+    const a = aggCli[cli];
+    if(a.brl < 100000) continue; // ignora clientes muito pequenos
+    if(a.comp === 0) continue;
+
+    const dAbs = a.atual - a.comp;
+    const dPct = (dAbs / a.comp) * 100;
+    const tend = calcularSlope(seriesMensais[cli] || {});
+
+    // Cruzamento com SO (se disponível)
+    let soContexto = null;
+    if(temSellout && aggCliSO[cli] && aggCliSO[cli].comp > 0){
+      const dPctSO = (aggCliSO[cli].atual - aggCliSO[cli].comp) / aggCliSO[cli].comp * 100;
+      soContexto = {dPctSO, gapSI_SO: dPct - dPctSO};
+    }
+
+    if(dPct < -5){
+      // Queda
+      const urgencia = Math.min(tend.mesesQueda / 6, 1.0);
+      const impacto = Math.abs(dAbs);
+
+      let acao = '';
+      let categoria = 'atencao';
+      let recuperabilidade = 0.5;
+
+      // Lógica de ação baseada em padrão
+      if(soContexto && soContexto.dPctSO < -5){
+        // SI cai E SO cai → demanda real caindo
+        acao = 'Investigar causa de mercado · Ativação no PDV · Reavaliar estratégia comercial';
+        recuperabilidade = 0.3; // mais difícil recuperar
+      } else if(soContexto && soContexto.dPctSO > 0){
+        // SO cresce mas SI cai → ruptura de abastecimento
+        acao = 'Reforçar pedidos · Verificar logística · Risco de ruptura no canal';
+        recuperabilidade = 0.8; // fácil recuperar (demanda existe)
+      } else if(tend.mesesQueda >= 3){
+        acao = 'Reunião executiva com comprador · Investigar root cause · Revisar contrato';
+        recuperabilidade = 0.5;
+      } else {
+        acao = 'Acompanhar de perto · Visita comercial · Avaliar ativação';
+        recuperabilidade = 0.6;
+      }
+
+      // Classificar
+      if(dPct < -15 && impacto > 500000 && tend.mesesQueda >= 3){
+        categoria = 'critico';
+      } else if(dPct < -10 || impacto > 300000){
+        categoria = 'atencao';
+      } else {
+        categoria = 'atencao';
+      }
+
+      acoes.push({
+        tipo: 'cliente',
+        nome: cli,
+        categoria: categoria,
+        impacto: impacto,
+        impactoSinal: dAbs,
+        dPct: dPct,
+        urgencia: urgencia,
+        recuperabilidade: recuperabilidade,
+        mesesQueda: tend.mesesQueda,
+        acao: acao,
+        soContexto: soContexto,
+        diagnostico: gerarDiagnosticoCliente(cli, dPct, tend, soContexto)
+      });
+    } else if(dPct > 10 && a.brl > 200000){
+      // Crescimento forte = oportunidade
+      const acao = 'Replicar estratégia em outras contas · Avaliar capacidade · Manter momentum';
+      acoes.push({
+        tipo: 'cliente',
+        nome: cli,
+        categoria: 'oportunidade',
+        impacto: dAbs,
+        impactoSinal: dAbs,
+        dPct: dPct,
+        urgencia: tend.mesesAlta / 6,
+        recuperabilidade: 0.7,
+        mesesQueda: 0,
+        acao: acao,
+        soContexto: soContexto,
+        diagnostico: `Crescimento forte de +${dPct.toFixed(1)}% (${tend.mesesAlta} meses em alta consecutivos). Concentrado em produtos da franquia ${aggCli[cli].franquia || 'principal'}.`
+      });
+    }
+  }
+
+  // -------- Detector 2: Produtos em queda vs franquia --------
+  for(const prod of Object.keys(aggProd)){
+    const p = aggProd[prod];
+    if(p.brl < 100000) continue;
+    if(p.comp === 0) continue;
+
+    const dAbs = p.atual - p.comp;
+    const dPct = (dAbs / p.comp) * 100;
+    const fr = p.franquia || '—';
+    const fAgg = aggFranquia[fr];
+    const dPctFr = fAgg && fAgg.comp > 0 ? (fAgg.atual - fAgg.comp) / fAgg.comp * 100 : 0;
+    const gapVsFr = dPct - dPctFr;
+
+    // Cruzamento com SO
+    let soContexto = null;
+    if(temSellout && aggProdSO[prod] && aggProdSO[prod].comp > 0){
+      const dPctSO = (aggProdSO[prod].atual - aggProdSO[prod].comp) / aggProdSO[prod].comp * 100;
+      soContexto = {dPctSO};
+    }
+
+    const tend = calcularSlope(seriesProdutos[prod] || {});
+
+    // Underperformance: produto cai enquanto franquia cresce
+    if(dPct < -5 && gapVsFr < -8 && Math.abs(dAbs) > 100000){
+      const urgencia = Math.min(tend.mesesQueda / 6, 1.0);
+      let acao = `Investigar concorrência · Ativação cirúrgica · Ampliar visitas técnicas (franquia ${fr} cresce ${dPctFr.toFixed(1)}%)`;
+      let categoria = 'atencao';
+      if(Math.abs(dAbs) > 500000 && dPct < -15) categoria = 'critico';
+
+      acoes.push({
+        tipo: 'produto',
+        nome: prod,
+        categoria: categoria,
+        impacto: Math.abs(dAbs),
+        impactoSinal: dAbs,
+        dPct: dPct,
+        urgencia: urgencia,
+        recuperabilidade: 0.5,
+        mesesQueda: tend.mesesQueda,
+        acao: acao,
+        soContexto: soContexto,
+        diagnostico: `Produto cai ${dPct.toFixed(1)}% enquanto franquia ${fr} cresce ${dPctFr.toFixed(1)}% (gap de ${gapVsFr.toFixed(1)}pp).${tend.mesesQueda >= 3 ? ' Em queda há ' + tend.mesesQueda + ' meses.' : ''}`
+      });
+    } else if(dPct > 15 && p.brl > 200000){
+      // Oportunidade de produto
+      const acao = `Investir em distribuição · Ampliar mix nas contas · Replicar em outras franquias`;
+      acoes.push({
+        tipo: 'produto',
+        nome: prod,
+        categoria: 'oportunidade',
+        impacto: dAbs,
+        impactoSinal: dAbs,
+        dPct: dPct,
+        urgencia: tend.mesesAlta / 6,
+        recuperabilidade: 0.7,
+        mesesQueda: 0,
+        acao: acao,
+        soContexto: soContexto,
+        diagnostico: `Crescimento forte de +${dPct.toFixed(1)}%, superando franquia ${fr} (+${dPctFr.toFixed(1)}%).`
+      });
+    }
+  }
+
+  // -------- Detector 3: Targets FOCO em risco --------
+  if(typeof mapTargets !== 'undefined' && Object.keys(mapTargets).length > 0){
+    const aggSI_unid = {};
+    for(const r of data){
+      const k = `${r[COLS.ANO]}-${r[COLS.MES_NUM]}`;
+      const prod = r[COLS.PRODUTO];
+      if(!aggSI_unid[prod]) aggSI_unid[prod] = {atual:0, comp:0};
+      const v = +r[COLS.VALOR_UNID] || 0;
+      if(periodoAtualSet.has(k)) aggSI_unid[prod].atual += v;
+      if(periodoCompSet.has(k)) aggSI_unid[prod].comp += v;
+    }
+
+    for(const [prod, target] of Object.entries(mapTargets)){
+      const a = aggSI_unid[prod];
+      if(!a || a.comp === 0) continue;
+      const realPct = ((a.atual - a.comp) / a.comp * 100);
+      const gapVsTarget = realPct - target;
+
+      if(gapVsTarget < -10){
+        // Significativamente abaixo do target
+        const impacto = Math.abs(aggProd[prod] ? aggProd[prod].atual - aggProd[prod].comp : 0);
+        if(impacto < 50000) continue;
+
+        let categoria = 'atencao';
+        if(gapVsTarget < -20 && impacto > 300000) categoria = 'critico';
+
+        // Evitar duplicar se já adicionou esse produto antes
+        const jaTem = acoes.some(a => a.tipo === 'produto' && a.nome === prod);
+        if(jaTem) continue;
+
+        acoes.push({
+          tipo: 'produto',
+          nome: prod,
+          categoria: categoria,
+          impacto: impacto,
+          impactoSinal: -impacto,
+          dPct: realPct,
+          urgencia: 0.6,
+          recuperabilidade: 0.6,
+          mesesQueda: 0,
+          acao: 'Acelerar pedidos · Revisar precificação · Campanha promocional',
+          soContexto: null,
+          diagnostico: `Target FOCO: produto cresce ${realPct.toFixed(1)}% vs meta ${target}% (gap de ${gapVsTarget.toFixed(1)}pp).`
+        });
+      }
+    }
+  }
+
+  // ============================================================
+  // 5. CALCULAR SCORE E ORDENAR
+  // ============================================================
+  const maxImpacto = Math.max(...acoes.map(a => a.impacto), 1);
+  for(const a of acoes){
+    const impactoNorm = a.impacto / maxImpacto;
+    a.score = 0.6 * impactoNorm + 0.3 * a.urgencia + 0.1 * a.recuperabilidade;
+  }
+  acoes.sort((a, b) => b.score - a.score);
+
+  // Separar por categoria
+  const criticos = acoes.filter(a => a.categoria === 'critico').slice(0, 5);
+  const atencao = acoes.filter(a => a.categoria === 'atencao').slice(0, 5);
+  const oportunidades = acoes.filter(a => a.categoria === 'oportunidade').slice(0, 5);
+
+  // ============================================================
+  // 6. RENDERIZAR
+  // ============================================================
+  aviso.textContent = `· ${criticos.length} críticos · ${atencao.length} atenção · ${oportunidades.length} oportunidades`;
+
+  // Resumo geral
+  const totalCritico = criticos.reduce((s, a) => s + a.impactoSinal, 0);
+  const totalAtencao = atencao.reduce((s, a) => s + a.impactoSinal, 0);
+  const totalOpor = oportunidades.reduce((s, a) => s + a.impactoSinal, 0);
+
+  resumoDiv.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:12px">
+      <div style="background:#FEF2F2;padding:12px;border-radius:8px;border-left:4px solid #DC2626">
+        <div style="font-size:11px;color:#7F1D1D;font-weight:700;text-transform:uppercase">🔴 Crítico</div>
+        <div style="font-size:18px;font-weight:800;color:#DC2626">${criticos.length} ${criticos.length === 1 ? 'item' : 'itens'}</div>
+        <div style="font-size:12px;color:#991B1B">Impacto: ${fmt(Math.abs(totalCritico))}</div>
+      </div>
+      <div style="background:#FFFBEB;padding:12px;border-radius:8px;border-left:4px solid #F59E0B">
+        <div style="font-size:11px;color:#92400E;font-weight:700;text-transform:uppercase">🟠 Atenção</div>
+        <div style="font-size:18px;font-weight:800;color:#F59E0B">${atencao.length} ${atencao.length === 1 ? 'item' : 'itens'}</div>
+        <div style="font-size:12px;color:#92400E">Impacto: ${fmt(Math.abs(totalAtencao))}</div>
+      </div>
+      <div style="background:#ECFDF5;padding:12px;border-radius:8px;border-left:4px solid #10B981">
+        <div style="font-size:11px;color:#065F46;font-weight:700;text-transform:uppercase">🟢 Oportunidade</div>
+        <div style="font-size:18px;font-weight:800;color:#10B981">${oportunidades.length} ${oportunidades.length === 1 ? 'item' : 'itens'}</div>
+        <div style="font-size:12px;color:#065F46">Potencial: ${fmt(Math.abs(totalOpor))}</div>
+      </div>
+    </div>
+  `;
+
+  // Renderizar 3 grupos
+  criticosDiv.innerHTML = renderGrupoAcoes('🔴 Crítico', criticos, '#DC2626', '#FEF2F2', '#7F1D1D');
+  atencaoDiv.innerHTML = renderGrupoAcoes('🟠 Atenção', atencao, '#F59E0B', '#FFFBEB', '#92400E');
+  oportDiv.innerHTML = renderGrupoAcoes('🟢 Oportunidade', oportunidades, '#10B981', '#ECFDF5', '#065F46');
+
+  // Salvar pra uso no PPT
+  window.__planoAcaoResultado = {criticos, atencao, oportunidades, acoes};
+}
+
+// Helper: gera texto de diagnóstico do cliente
+function gerarDiagnosticoCliente(cli, dPct, tend, soContexto){
+  let txt = `Vendas em queda de ${dPct.toFixed(1)}%`;
+  if(tend.mesesQueda >= 3) txt += ` · em retração há ${tend.mesesQueda} meses consecutivos`;
+  if(soContexto){
+    if(soContexto.dPctSO < -5) txt += ` · sell-out também em queda (${soContexto.dPctSO.toFixed(1)}%) — demanda real caindo`;
+    else if(soContexto.dPctSO > 5) txt += ` · sell-out em alta (+${soContexto.dPctSO.toFixed(1)}%) — possível ruptura no canal`;
+    else if(Math.abs(soContexto.dPctSO) <= 5) txt += ` · sell-out estável — descompasso pode ser ajuste de estoque`;
+  }
+  return txt + '.';
+}
+
+// Helper: renderiza um grupo de ações (Crítico / Atenção / Oportunidade)
+function renderGrupoAcoes(titulo, lista, corPrimaria, corFundo, corTexto){
+  if(lista.length === 0){
+    return `<div style="margin-top:14px;font-size:12px;color:var(--ink-muted);font-style:italic;padding:10px">
+      ${titulo}: nenhum item nesta categoria com base nos filtros aplicados.
+    </div>`;
+  }
+
+  let html = `<div style="margin-top:14px;font-size:13px;font-weight:700;color:${corTexto};margin-bottom:8px">${titulo} <span style="font-weight:400;color:var(--ink-muted)">(${lista.length})</span></div>`;
+  lista.forEach((a, idx) => {
+    const tipoIcon = a.tipo === 'cliente' ? '🏥' : '💊';
+    const tipoLabel = a.tipo === 'cliente' ? 'Cliente' : 'Produto';
+    const sinalImpacto = a.impactoSinal >= 0 ? '+' : '-';
+    const corImpacto = a.impactoSinal >= 0 ? '#059669' : '#DC2626';
+    html += `
+      <div style="background:${corFundo};border-left:4px solid ${corPrimaria};padding:14px;border-radius:8px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px;flex-wrap:wrap">
+          <div style="flex:1;min-width:250px">
+            <div style="font-size:11px;color:var(--ink-muted);font-weight:600;text-transform:uppercase">#${idx+1} · ${tipoIcon} ${tipoLabel}</div>
+            <div style="font-size:15px;font-weight:800;color:#1E3A5F;margin-top:2px">${a.nome}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:11px;color:var(--ink-muted);font-weight:600;text-transform:uppercase">Impacto</div>
+            <div style="font-size:16px;font-weight:800;color:${corImpacto}">${sinalImpacto}${fmt(Math.abs(a.impactoSinal))}</div>
+            <div style="font-size:11px;color:${corImpacto}">${a.dPct >= 0 ? '+' : ''}${a.dPct.toFixed(1)}%</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#1E3A5F;line-height:1.4;margin-bottom:8px">
+          <b>🔍 Diagnóstico:</b> ${a.diagnostico}
+        </div>
+        <div style="font-size:12px;color:${corTexto};line-height:1.4;background:white;padding:8px 10px;border-radius:6px">
+          <b>💡 Ações sugeridas:</b> ${a.acao}
+        </div>
+      </div>
+    `;
+  });
+  return html;
+}
+
 
 // ============================================================
 // RESUMO COMPARATIVO - Card de visão consolidada por rede
@@ -2210,6 +3263,7 @@ function renderResumo(per){
     // Pré-computa set normalizado de produtos pra performance
     const produtoSetNormResumo = construirSetProdutosNorm(produtoSet);
     const dadosSelloutFiltrados = rawDataSellout.filter(r => {
+      if(!selloutCanalOk(r)) return false;
       if(franquiasSet && !franquiasSet.has(String(r.FRANQUIA))) return false;
       if(tipoSet && !tipoSet.has(r.TIPO_CLIENTE)) return false;
       if(produtoSetNormResumo && !produtoBateFiltro(r.PRODUTO, produtoSetNormResumo)) return false;
@@ -2464,6 +3518,7 @@ function renderComparativo(per){
   const soNomeOriginal = {}; // map nomeNormalizado -> primeiro nome original encontrado (pra display)
   const produtoSetNormComp = construirSetProdutosNorm(produtoSet);
   for(const r of rawDataSellout){
+      if(!selloutCanalOk(r)) continue;
     if(franquiasSet && !franquiasSet.has(String(r.FRANQUIA))) continue;
     if(tipoSet && !tipoSet.has(r.TIPO_CLIENTE)) continue;
     if(produtoSetNormComp && !produtoBateFiltro(r.PRODUTO, produtoSetNormComp)) continue;
@@ -2735,6 +3790,7 @@ function renderKPIs(data, per){
 
     let atual=0, comp=0, mesUltimoVal=0, mom=0, ytd=0, ytdAnt=0;
     for(const r of rawDataSellout){
+      if(!selloutCanalOk(r)) continue;
       if(franquiasSet && !franquiasSet.has(String(r.FRANQUIA))) continue;
       if(tipoSet && !tipoSet.has(r.TIPO_CLIENTE)) continue;
       if(produtoSet && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSet))) continue;
@@ -2986,6 +4042,7 @@ function renderInsights(data, per){
 
     let soAtual = 0, soComp = 0;
     for(const r of rawDataSellout){
+      if(!selloutCanalOk(r)) continue;
       if(franquiasSetIns && !franquiasSetIns.has(String(r.FRANQUIA))) continue;
       if(tipoSetIns && !tipoSetIns.has(r.TIPO_CLIENTE)) continue;
       if(produtoSetIns && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSetIns))) continue;
@@ -3369,6 +4426,7 @@ function renderTargets(data, per){
     const setCompSO = new Set(periodoSOComp.map(p => `${p.ano}-${p.mes}`));
 
     for(const r of rawDataSellout){
+      if(!selloutCanalOk(r)) continue;
       if(franquiasSet && !franquiasSet.has(String(r.FRANQUIA))) continue;
       if(tipoSet && !tipoSet.has(r.TIPO_CLIENTE)) continue;
       const k = `${r.ANO}-${r.MES}`;
@@ -3780,6 +4838,7 @@ function renderChartSellout(per){
 
   // Agregar valores
   for(const r of rawDataSellout){
+      if(!selloutCanalOk(r)) continue;
     if(franquiasSet && !franquiasSet.has(String(r.FRANQUIA))) continue;
     if(tipoSet && !tipoSet.has(r.TIPO_CLIENTE)) continue;
     if(produtoSet && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSet))) continue;
@@ -4115,6 +5174,7 @@ function agregarSellout(groupBy){
   const kComp = `${ultMes.ano-1}-${ultMes.mes}`;
   const result = {};
   for(const r of rawDataSellout){
+      if(!selloutCanalOk(r)) continue;
     if(franquiasSet && !franquiasSet.has(String(r.FRANQUIA))) continue;
     if(tipoSet && !tipoSet.has(r.TIPO_CLIENTE)) continue;
     if(produtoSet && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSet))) continue;
@@ -4157,9 +5217,14 @@ function renderTopClientesSO(per){
 
   document.querySelector('#tabelaClientes tbody').innerHTML = linhas.map((r,i)=>{
     const trend = r.dPct>=10?'🚀 Forte alta':r.dPct>=0?'📈 Alta':r.dPct>=-10?'📉 Queda':'🚨 Forte queda';
+    // Aviso de canal misto: se cliente é distribuidor, está mostrando todos canais
+    const ehDist = clienteEhDistribuidor(r.cliente);
+    const canalLabel = ehDist
+      ? '<span title="Distribuidor: inclui Pharma + Hospitalar + Outros canais" style="font-size:10px;padding:2px 6px;background:#FEF3C7;color:#92400E;border-radius:4px;font-weight:700;margin-left:4px">🏪 Todos*</span>'
+      : '<span title="Apenas canal Farmacia" style="font-size:10px;padding:2px 6px;background:#DBEAFE;color:#1E40AF;border-radius:4px;font-weight:700;margin-left:4px">🏥 Pharma</span>';
     return `<tr>
       <td><span class="rank ${i<3?'top3':''}">${i+1}</span></td>
-      <td><b>${r.cliente}</b></td>
+      <td><b>${r.cliente}</b>${canalLabel}</td>
       <td><span style="font-size:10px;padding:2px 6px;background:#dbeafe;color:#1e40af;border-radius:4px;font-weight:700">${r.tipo||'-'}</span></td>
       <td class="num">${fmt(r.atual)}</td>
       <td class="num" style="color:var(--ink-muted)">${fmt(r.comp)}</td>
@@ -4167,6 +5232,13 @@ function renderTopClientesSO(per){
       <td class="num"><span class="variation ${r.dPct>=0?'pos':'neg'}">${r.dPct>=0?'▲ +':'▼ -'}${Math.abs(r.dPct).toFixed(1)}%</span></td>
       <td>${trend}</td></tr>`;
   }).join('');
+
+  // Avisar que tabela tem canais mistos se houver distribuidor
+  const temDist = linhas.some(r => clienteEhDistribuidor(r.cliente));
+  if(temDist){
+    const aviso = document.getElementById('topClientesAvisoSO');
+    aviso.innerHTML += ' <span class="fonte-aviso" style="background:#FEF3C7;color:#92400E;font-size:10px;margin-left:4px">⚠️ Distribuidores incluem todos canais</span>';
+  }
 }
 
 function renderTopProdutos(data, per){
@@ -4774,6 +5846,493 @@ function exportInsights(){
 // ============================================================
 // EXPORTAR POWERPOINT
 // ============================================================
+// ============================================================
+// ONE-PAGER EXECUTIVO
+// 1 slide PPT autoexplicativo, formato A4 paisagem
+// Para diretoria: visão sintética em <10 segundos
+// ============================================================
+async function exportOnePager(){
+  const btn = document.getElementById('btnOnePager');
+  btn.disabled = true;
+  const txtOriginal = btn.textContent;
+  btn.textContent = '⏳ Gerando...';
+
+  try {
+    if(typeof PptxGenJS === 'undefined'){
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
+      await new Promise((res, rej) => {script.onload = res; script.onerror = rej; document.head.appendChild(script);});
+    }
+
+    const pptx = new PptxGenJS();
+    pptx.defineLayout({name:'A4_LANDSCAPE', width:11.69, height:8.27}); // A4 paisagem em polegadas
+    pptx.layout = 'A4_LANDSCAPE';
+    pptx.author = 'Alcon';
+    pptx.title = 'Alcon Sales · One-Pager Executivo';
+
+    // Cores Alcon
+    const AZUL = '003595';
+    const AZUL_ESCURO = '002670';
+    const AZUL_CLARO = 'EBF4FB';
+    const VERDE = '059669';
+    const VERMELHO = 'DC2626';
+    const CINZA = '64748B';
+    const CINZA_CLARO = 'F1F5F9';
+    const BRANCO = 'FFFFFF';
+    const PRETO = '0F172A';
+
+    const slide = pptx.addSlide();
+    slide.background = {color: BRANCO};
+
+    // ============ HEADER (faixa azul superior) ============
+    slide.addShape(pptx.ShapeType.rect, {
+      x:0, y:0, w:11.69, h:0.55, fill:{color:AZUL}, line:{color:AZUL}
+    });
+    // Logo + título
+    slide.addText('🏥 ALCON BRASIL', {
+      x:0.3, y:0.05, w:3, h:0.45, fontSize:18, bold:true, color:BRANCO, fontFace:'Open Sans', valign:'middle'
+    });
+    // Período + data atualização
+    const per = getPeriodos();
+    const dataHoje = new Date().toLocaleDateString('pt-BR');
+    slide.addText(`${per.labelAtual} vs ${per.labelComp || '—'} · Atualizado: ${dataHoje}`, {
+      x:3.5, y:0.05, w:8, h:0.45, fontSize:11, color:BRANCO, fontFace:'Open Sans', valign:'middle', align:'right'
+    });
+    slide.addText('SALES INSIGHTS · ONE-PAGER EXECUTIVO', {
+      x:3.5, y:0.05, w:8, h:0.45, fontSize:9, italic:true, color:'C7D7E8', fontFace:'Open Sans', valign:'middle', align:'center'
+    });
+
+    // ============ KPI HEROES (3 métricas: UNID + BRL + USD) ============
+    const base = filtrarBase();
+
+    // Calcular totais para cada métrica (independente do filtro de métrica do dashboard)
+    function totalParaMetrica(dados, periodo, metrica){
+      const colMap = {UNID: COLS.VALOR_UNID, BRL: COLS.VALOR_BRL, USD: COLS.VALOR_USD};
+      const col = colMap[metrica];
+      const set = new Set(periodo.map(p => `${p.ano}-${p.mes}`));
+      let total = 0;
+      for(const r of dados){
+        const k = `${r[COLS.ANO]}-${r[COLS.MES_NUM]}`;
+        if(set.has(k)) total += (+r[col] || 0);
+      }
+      return total;
+    }
+
+    const totaisAtual = {
+      UNID: totalParaMetrica(base, per.periodoAtual, 'UNID'),
+      BRL: totalParaMetrica(base, per.periodoAtual, 'BRL'),
+      USD: totalParaMetrica(base, per.periodoAtual, 'USD')
+    };
+    const totaisComp = {
+      UNID: totalParaMetrica(base, per.periodoComp, 'UNID'),
+      BRL: totalParaMetrica(base, per.periodoComp, 'BRL'),
+      USD: totalParaMetrica(base, per.periodoComp, 'USD')
+    };
+
+    // Identifica quais métricas têm dados (auto)
+    const metricasDisponiveis = [];
+    if(totaisAtual.UNID > 0 || totaisComp.UNID > 0) metricasDisponiveis.push({key:'UNID', label:'📦 UNIDADES', formatador: (v) => v.toLocaleString('pt-BR', {maximumFractionDigits: 0})});
+    if(totaisAtual.BRL > 0 || totaisComp.BRL > 0) metricasDisponiveis.push({key:'BRL', label:'💰 RECEITA BRL', formatador: (v) => 'R$ ' + (v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'k' : v.toFixed(0))});
+    if(totaisAtual.USD > 0 || totaisComp.USD > 0) metricasDisponiveis.push({key:'USD', label:'💵 RECEITA USD', formatador: (v) => 'USD ' + (v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'k' : v.toFixed(0))});
+
+    // Distribuir KPIs igualmente
+    const numKpis = metricasDisponiveis.length;
+    const margemKpi = 0.3;
+    const espacoTotal = 11.69 - 2 * margemKpi;
+    const wKpi = (espacoTotal - (numKpis - 1) * 0.15) / numKpis;
+
+    metricasDisponiveis.forEach((m, idx) => {
+      const xKpi = margemKpi + idx * (wKpi + 0.15);
+      const atual = totaisAtual[m.key];
+      const comp = totaisComp[m.key];
+      const varPctM = comp > 0 ? ((atual - comp) / comp * 100) : 0;
+      const corVar = varPctM >= 0 ? VERDE : VERMELHO;
+      const seta = varPctM >= 0 ? '▲' : '▼';
+
+      drawKpiCard(slide, pptx, xKpi, 0.75, wKpi, 1.45, {
+        label: m.label,
+        valor: m.formatador(atual),
+        sub: `${seta} ${varPctM >= 0 ? '+' : ''}${varPctM.toFixed(1)}% vs ${per.labelComp || 'YA'}`,
+        cor: corVar
+      });
+    });
+
+    // ============ STORY EXECUTIVO ============
+    const varPctPrincipal = totaisComp.BRL > 0 ? ((totaisAtual.BRL - totaisComp.BRL) / totaisComp.BRL * 100) : 0;
+    const storyParts = gerarStoryExecutivo(base, per, varPctPrincipal);
+    slide.addShape(pptx.ShapeType.rect, {
+      x:0.3, y:2.35, w:11.1, h:1.1, fill:{color:AZUL_CLARO}, line:{color:AZUL, width:1}
+    });
+    slide.addText('📊 RESUMO EXECUTIVO', {
+      x:0.5, y:2.42, w:5, h:0.25, fontSize:10, bold:true, color:AZUL, fontFace:'Open Sans'
+    });
+    slide.addText(storyParts.join(' '), {
+      x:0.5, y:2.7, w:10.7, h:0.7, fontSize:10, color:'1E3A5F', fontFace:'Open Sans', valign:'top'
+    });
+
+    // ============ SELL-IN × SELL-OUT (saúde do canal) ============
+    const yBaseSO = 3.55;
+    slide.addShape(pptx.ShapeType.rect, {
+      x:0.3, y:yBaseSO, w:11.1, h:1.5, fill:{color:'F0F9FF'}, line:{color:'0EA5E9', width:1}
+    });
+    slide.addText('🔄 SELL-IN × SELL-OUT · Saúde do Canal', {
+      x:0.5, y:yBaseSO+0.07, w:11, h:0.25, fontSize:10, bold:true, color:'0369A1', fontFace:'Open Sans'
+    });
+
+    if(rawDataSellout && rawDataSellout.length > 0 && selloutUltimoPeriodo){
+      // Calcular gap SI vs SO no agregado e por cliente
+      const ultMesSO = selloutUltimoPeriodo;
+      function temNoSO(p){
+        return (p.ano < ultMesSO.ano) || (p.ano === ultMesSO.ano && p.mes <= ultMesSO.mes);
+      }
+      let perAtualSO = per.periodoAtual.filter(temNoSO);
+      let perCompSO = perAtualSO.map(p => ({ano: p.ano - 1, mes: p.mes}));
+      if(perAtualSO.length === 0){
+        perAtualSO = [{ano: ultMesSO.ano, mes: ultMesSO.mes}];
+        perCompSO = [{ano: ultMesSO.ano - 1, mes: ultMesSO.mes}];
+      }
+      const setAtualSO = new Set(perAtualSO.map(p => `${p.ano}-${p.mes}`));
+      const setCompSO = new Set(perCompSO.map(p => `${p.ano}-${p.mes}`));
+
+      // Agregação SI por cliente (no MESMO período do SO pra comparação justa)
+      const setSI_compativel = new Set(perAtualSO.map(p => `${p.ano}-${p.mes}`));
+      const setSI_comp = new Set(perCompSO.map(p => `${p.ano}-${p.mes}`));
+
+      const aggSI = {};
+      const aggSO = {};
+      let totalSI_atual = 0, totalSI_comp = 0;
+      let totalSO_atual = 0, totalSO_comp = 0;
+
+      for(const r of base){
+        const k = `${r[COLS.ANO]}-${r[COLS.MES_NUM]}`;
+        const cli = r[COLS.CLIENTE] || '—';
+        const v = +r[COLS.VALOR_UNID] || 0; // sempre UNID pra SI×SO comparável
+        if(!aggSI[cli]) aggSI[cli] = {atual:0, comp:0};
+        if(setSI_compativel.has(k)){ aggSI[cli].atual += v; totalSI_atual += v; }
+        if(setSI_comp.has(k)){ aggSI[cli].comp += v; totalSI_comp += v; }
+      }
+
+      for(const r of rawDataSellout){
+      if(!selloutCanalOk(r)) continue;
+        const k = `${r.ANO}-${r.MES}`;
+        const cli = r.GRUPO_PAINEL;
+        const v = +r.UNID || 0;
+        if(!aggSO[cli]) aggSO[cli] = {atual:0, comp:0};
+        if(setAtualSO.has(k)){ aggSO[cli].atual += v; totalSO_atual += v; }
+        if(setCompSO.has(k)){ aggSO[cli].comp += v; totalSO_comp += v; }
+      }
+
+      const dPctSI_total = totalSI_comp > 0 ? ((totalSI_atual - totalSI_comp) / totalSI_comp * 100) : 0;
+      const dPctSO_total = totalSO_comp > 0 ? ((totalSO_atual - totalSO_comp) / totalSO_comp * 100) : 0;
+      const gapTotal = dPctSI_total - dPctSO_total;
+
+      // Classificar cada cliente em saudável / empurrado / ruptura
+      let nSaudavel = 0, nEmpurrado = 0, nRuptura = 0;
+      const piores = [];
+
+      for(const cli of Object.keys(aggSI)){
+        const a = aggSI[cli];
+        if(a.atual + a.comp < 100) continue; // ignora micro
+        const dSI = a.comp > 0 ? (a.atual - a.comp) / a.comp * 100 : 0;
+        const aSO = aggSO[cli] || {atual:0, comp:0};
+        if(aSO.atual + aSO.comp < 50) continue; // sem SO comparável
+        const dSO = aSO.comp > 0 ? (aSO.atual - aSO.comp) / aSO.comp * 100 : 0;
+        const gap = dSI - dSO;
+
+        if(Math.abs(gap) <= 10) nSaudavel++;
+        else if(gap > 10) {
+          nEmpurrado++;
+          piores.push({cli, gap, tipo:'empurrado', dSI, dSO});
+        }
+        else if(gap < -10) {
+          nRuptura++;
+          piores.push({cli, gap, tipo:'ruptura', dSI, dSO});
+        }
+      }
+
+      piores.sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
+      const top2 = piores.slice(0, 2);
+
+      // Renderizar resumo SI×SO
+      const yLinha1 = yBaseSO + 0.4;
+      slide.addText([
+        {text:'Sell-in: ', options:{fontSize:11, bold:true, color:'0369A1'}},
+        {text:`${dPctSI_total >= 0 ? '+' : ''}${dPctSI_total.toFixed(1)}%`, options:{fontSize:13, bold:true, color: dPctSI_total >= 0 ? VERDE : VERMELHO}},
+        {text:'    │    Sell-out: ', options:{fontSize:11, bold:true, color:'0369A1'}},
+        {text:`${dPctSO_total >= 0 ? '+' : ''}${dPctSO_total.toFixed(1)}%`, options:{fontSize:13, bold:true, color: dPctSO_total >= 0 ? VERDE : VERMELHO}},
+        {text:'    │    Gap: ', options:{fontSize:11, bold:true, color:'0369A1'}},
+        {text:`${gapTotal >= 0 ? '+' : ''}${gapTotal.toFixed(1)}pp`, options:{fontSize:13, bold:true, color: Math.abs(gapTotal) > 5 ? VERMELHO : VERDE}},
+      ], {x:0.5, y:yLinha1, w:10.5, h:0.3, valign:'top'});
+
+      // Linha 2: contagem por categoria
+      const yLinha2 = yBaseSO + 0.78;
+      slide.addText([
+        {text:'✅ ', options:{fontSize:11}},
+        {text:`${nSaudavel} saudáveis`, options:{fontSize:10, bold:true, color:'059669'}},
+        {text:'    ⚠️ ', options:{fontSize:11}},
+        {text:`${nEmpurrado} empurradas (SI > SO em 10pp+)`, options:{fontSize:10, bold:true, color:'D97706'}},
+        {text:'    🔴 ', options:{fontSize:11}},
+        {text:`${nRuptura} c/ ruptura (SO > SI em 10pp+)`, options:{fontSize:10, bold:true, color:'DC2626'}}
+      ], {x:0.5, y:yLinha2, w:10.7, h:0.3, valign:'top'});
+
+      // Linha 3: top 2 piores nominalmente
+      if(top2.length > 0){
+        const yLinha3 = yBaseSO + 1.15;
+        const txtsPiores = [];
+        top2.forEach((p, i) => {
+          const icon = p.tipo === 'empurrado' ? '⚠️' : '🔴';
+          const corTipo = p.tipo === 'empurrado' ? 'D97706' : 'DC2626';
+          if(i > 0) txtsPiores.push({text:'  ·  ', options:{fontSize:10, color:CINZA}});
+          txtsPiores.push({text:`${icon} `, options:{fontSize:10}});
+          txtsPiores.push({text:`${p.cli}`, options:{fontSize:10, bold:true, color:'1E3A5F'}});
+          txtsPiores.push({text:` (${p.tipo}, gap ${p.gap >= 0 ? '+' : ''}${p.gap.toFixed(0)}pp)`, options:{fontSize:9.5, color: corTipo}});
+        });
+        slide.addText(txtsPiores, {
+          x:0.5, y:yLinha3, w:10.7, h:0.3, valign:'top'
+        });
+      }
+    } else {
+      // Sem sell-out
+      slide.addText('Sell-out não disponível neste período. Configure DePara_Produtos.xlsx para análise integrada.', {
+        x:0.5, y:yBaseSO+0.5, w:10.7, h:0.5, fontSize:10, italic:true, color:CINZA, fontFace:'Open Sans', align:'center'
+      });
+    }
+
+    // ============ ONDE ATACAR · Top 3 priorizado ============
+    const yBaseAcoes = 5.2;
+    slide.addShape(pptx.ShapeType.rect, {
+      x:0.3, y:yBaseAcoes, w:11.1, h:2.0, fill:{color:'FFFBEB'}, line:{color:'F59E0B', width:1}
+    });
+    slide.addText('🎯 ONDE ATACAR · Top 3 prioridades', {
+      x:0.5, y:yBaseAcoes+0.07, w:11, h:0.25, fontSize:10, bold:true, color:'92400E', fontFace:'Open Sans'
+    });
+
+    // Pegar 1 crítico, 1 atenção, 1 oportunidade do Plano de Ação
+    if(window.__planoAcaoResultado){
+      const pa = window.__planoAcaoResultado;
+      const top3 = [];
+      if(pa.criticos.length > 0) top3.push(pa.criticos[0]);
+      if(pa.atencao.length > 0) top3.push(pa.atencao[0]);
+      if(pa.oportunidades.length > 0) top3.push(pa.oportunidades[0]);
+
+      // Se tem menos de 3, completar com mais críticos ou atenção
+      if(top3.length < 3){
+        const restantes = [...pa.criticos.slice(1), ...pa.atencao.slice(1)].slice(0, 3 - top3.length);
+        top3.push(...restantes);
+      }
+
+      const wAcao = (11.1 - 0.4) / 3;  // largura de cada caixa
+      top3.slice(0, 3).forEach((a, idx) => {
+        const xAcao = 0.4 + idx * wAcao;
+        const yAcao = yBaseAcoes + 0.4;
+        const corCat = a.categoria === 'critico' ? 'DC2626' : (a.categoria === 'atencao' ? 'F59E0B' : '10B981');
+        const fundoCat = a.categoria === 'critico' ? 'FEF2F2' : (a.categoria === 'atencao' ? 'FFFBEB' : 'ECFDF5');
+        const icon = a.categoria === 'critico' ? '🔴' : (a.categoria === 'atencao' ? '🟠' : '🟢');
+
+        // Caixa
+        slide.addShape(pptx.ShapeType.rect, {
+          x:xAcao, y:yAcao, w:wAcao - 0.1, h:1.45, fill:{color: BRANCO}, line:{color: corCat, width:1.5}
+        });
+
+        // Header da caixa (#1 + impacto)
+        const sinalImpacto = a.impactoSinal >= 0 ? '+' : '-';
+        slide.addText([
+          {text:`${icon} #${idx+1}`, options:{fontSize:9, bold:true, color: corCat}},
+          {text:`  ${sinalImpacto}${fmt(Math.abs(a.impactoSinal))}`, options:{fontSize:11, bold:true, color: a.impactoSinal >= 0 ? VERDE : VERMELHO}}
+        ], {x:xAcao+0.1, y:yAcao+0.06, w:wAcao-0.2, h:0.25});
+
+        // Nome
+        slide.addText(a.nome, {
+          x:xAcao+0.1, y:yAcao+0.32, w:wAcao-0.2, h:0.3,
+          fontSize:11, bold:true, color:'1E3A5F', fontFace:'Open Sans'
+        });
+
+        // Diagnóstico (curto)
+        const diagnosticoCurto = a.diagnostico.length > 110 ? a.diagnostico.substring(0, 107) + '...' : a.diagnostico;
+        slide.addText(diagnosticoCurto, {
+          x:xAcao+0.1, y:yAcao+0.62, w:wAcao-0.2, h:0.45,
+          fontSize:8.5, color:'334155', fontFace:'Open Sans', valign:'top'
+        });
+
+        // Ação
+        const acaoCurta = a.acao.length > 100 ? a.acao.substring(0, 97) + '...' : a.acao;
+        slide.addText([
+          {text:'→ ', options:{fontSize:9, bold:true, color: corCat}},
+          {text: acaoCurta, options:{fontSize:8.5, bold:true, color:'1E3A5F'}}
+        ], {x:xAcao+0.1, y:yAcao+1.1, w:wAcao-0.2, h:0.3, valign:'top'});
+      });
+    } else {
+      slide.addText('Plano de ação não disponível. Veja card 🎯 Plano de Ação no dashboard para gerar.', {
+        x:0.5, y:yBaseAcoes+0.7, w:10.7, h:0.5, fontSize:10, italic:true, color:CINZA, fontFace:'Open Sans', align:'center'
+      });
+    }
+
+    // ============ DECOMPOSIÇÃO (rodapé compacto) ============
+    if(window.__decompResultado){
+      const d = window.__decompResultado;
+      const totalAbs = Math.abs(d.totalVolume) + Math.abs(d.totalPreco) + Math.abs(d.totalMix);
+      const pctV = totalAbs > 0 ? (Math.abs(d.totalVolume) / totalAbs * 100) : 0;
+      const pctP = totalAbs > 0 ? (Math.abs(d.totalPreco) / totalAbs * 100) : 0;
+      const pctM = totalAbs > 0 ? (Math.abs(d.totalMix) / totalAbs * 100) : 0;
+      slide.addShape(pptx.ShapeType.rect, {
+        x:0.3, y:7.35, w:11.1, h:0.55, fill:{color:CINZA_CLARO}, line:{color:'CBD5E1', width:0.5}
+      });
+      slide.addText([
+        {text:'🔍 Decomposição BRL: ', options:{fontSize:9.5, bold:true, color:AZUL}},
+        {text:'Volume ', options:{fontSize:10, bold:true, color:'10B981'}},
+        {text:`${d.totalVolume >= 0 ? '+' : '-'}${fmt(Math.abs(d.totalVolume))} (${pctV.toFixed(0)}%)   │   `, options:{fontSize:10, color:PRETO}},
+        {text:'Preço ', options:{fontSize:10, bold:true, color:'3B82F6'}},
+        {text:`${d.totalPreco >= 0 ? '+' : '-'}${fmt(Math.abs(d.totalPreco))} (${pctP.toFixed(0)}%)   │   `, options:{fontSize:10, color:PRETO}},
+        {text:'Mix ', options:{fontSize:10, bold:true, color:'A855F7'}},
+        {text:`${d.totalMix >= 0 ? '+' : '-'}${fmt(Math.abs(d.totalMix))} (${pctM.toFixed(0)}%)`, options:{fontSize:10, color:PRETO}}
+      ], {x:0.5, y:7.4, w:10.7, h:0.5, valign:'middle'});
+    }
+
+    // ============ FOOTER ============
+    slide.addText(`Gerado por Alcon Sales Insights · ${dataHoje} · One-Pager Executivo`, {
+      x:0.3, y:7.97, w:11.1, h:0.2, fontSize:7.5, color:CINZA, italic:true, align:'center', fontFace:'Open Sans'
+    });
+
+    // Download
+    const ts = new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');
+    await pptx.writeFile({fileName: `Alcon_OnePager_${ts}.pptx`});
+  } catch(err){
+    alert('Erro ao gerar One-Pager: ' + err.message);
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = txtOriginal;
+  }
+}
+
+// Helpers do One-Pager
+function drawKpiCard(slide, pptx, x, y, w, h, dados){
+  const BRANCO = 'FFFFFF';
+  const CINZA = '64748B';
+  slide.addShape(pptx.ShapeType.rect, {
+    x:x, y:y, w:w, h:h, fill:{color:BRANCO}, line:{color:'E2E8F0', width:1}
+  });
+  // Barra colorida superior
+  slide.addShape(pptx.ShapeType.rect, {
+    x:x, y:y, w:w, h:0.08, fill:{color:dados.cor}, line:{color:dados.cor}
+  });
+  slide.addText(dados.label, {
+    x:x+0.15, y:y+0.15, w:w-0.3, h:0.3, fontSize:10, color:CINZA, bold:true, fontFace:'Open Sans'
+  });
+  slide.addText(dados.valor, {
+    x:x+0.15, y:y+0.45, w:w-0.3, h:0.7, fontSize:32, bold:true, color:dados.cor, fontFace:'Open Sans'
+  });
+  slide.addText(dados.sub || '', {
+    x:x+0.15, y:y+1.18, w:w-0.3, h:0.3, fontSize:10, color:CINZA, fontFace:'Open Sans'
+  });
+}
+
+function drawTopBox(slide, pptx, x, y, w, h, titulo, cor, base, per, tipo){
+  const BRANCO = 'FFFFFF';
+  slide.addShape(pptx.ShapeType.rect, {
+    x:x, y:y, w:w, h:h, fill:{color:BRANCO}, line:{color:'E2E8F0', width:1}
+  });
+  slide.addShape(pptx.ShapeType.rect, {
+    x:x, y:y, w:w, h:0.35, fill:{color:cor}, line:{color:cor}
+  });
+  slide.addText(titulo, {
+    x:x+0.1, y:y+0.05, w:w-0.2, h:0.25, fontSize:10, bold:true, color:BRANCO, fontFace:'Open Sans', valign:'middle'
+  });
+
+  // Calcular top 3 produtos por impacto absoluto
+  const periodoAtualSet = new Set(per.periodoAtual.map(p => `${p.ano}-${p.mes}`));
+  const periodoCompSet = new Set(per.periodoComp.map(p => `${p.ano}-${p.mes}`));
+  const agg = {};
+  for(const r of base){
+    const k = `${r[COLS.ANO]}-${r[COLS.MES_NUM]}`;
+    const prod = r[COLS.PRODUTO];
+    if(!agg[prod]) agg[prod] = {atual:0, comp:0, brl:0};
+    const v = getValor(r);
+    const brl = +r[COLS.VALOR_BRL] || 0;
+    if(periodoAtualSet.has(k)){ agg[prod].atual += v; agg[prod].brl += brl; }
+    if(periodoCompSet.has(k)) agg[prod].comp += v;
+  }
+  const linhas = Object.keys(agg).map(p => ({
+    nome: p, atual: agg[p].atual, comp: agg[p].comp,
+    brl: agg[p].brl, dAbs: agg[p].atual - agg[p].comp
+  })).filter(r => r.brl >= 100000); // só relevantes em BRL
+
+  let top3;
+  if(tipo === 'cresc') top3 = linhas.filter(r => r.dAbs > 0).sort((a,b) => b.dAbs - a.dAbs).slice(0,3);
+  else top3 = linhas.filter(r => r.dAbs < 0).sort((a,b) => a.dAbs - b.dAbs).slice(0,3);
+
+  if(top3.length === 0){
+    slide.addText(tipo === 'cresc' ? 'Sem produtos crescendo neste filtro' : 'Sem produtos em queda', {
+      x:x+0.1, y:y+0.5, w:w-0.2, h:1.4, fontSize:11, italic:true, color:'94A3B8', valign:'middle', align:'center', fontFace:'Open Sans'
+    });
+    return;
+  }
+
+  // Linhas com barras
+  top3.forEach((r, i) => {
+    const yBase = y + 0.45 + (i * 0.45);
+    slide.addText(`${i+1}. ${r.nome}`, {
+      x:x+0.15, y:yBase, w:w*0.45, h:0.18, fontSize:11, bold:true, color:'0F172A', fontFace:'Open Sans'
+    });
+    const valorTxt = (r.dAbs >= 0 ? '+' : '-') + fmt(Math.abs(r.dAbs));
+    slide.addText(valorTxt, {
+      x:x+w*0.55, y:yBase, w:w*0.4, h:0.18, fontSize:12, bold:true, color:cor, align:'right', fontFace:'Open Sans'
+    });
+    // Barra de proporção
+    const maxAbs = Math.max(...top3.map(t => Math.abs(t.dAbs)));
+    const pct = maxAbs > 0 ? (Math.abs(r.dAbs) / maxAbs) : 0;
+    slide.addShape(pptx.ShapeType.rect, {
+      x:x+0.15, y:yBase+0.2, w:(w-0.3)*pct, h:0.08, fill:{color:cor}, line:{color:cor}
+    });
+  });
+}
+
+function gerarStoryExecutivo(base, per, varPct){
+  const partes = [];
+  const direcao = varPct >= 0 ? 'crescimento' : 'queda';
+  const intensidade = Math.abs(varPct) > 15 ? 'forte' : (Math.abs(varPct) > 5 ? 'consistente' : 'leve');
+
+  partes.push(`Performance: ${intensidade} ${direcao} de ${varPct >= 0 ? '+' : ''}${varPct.toFixed(1)}% em receita BRL vs ${per.labelComp}.`);
+
+  // Decomposição (se aplicável)
+  if(window.__decompResultado){
+    const d = window.__decompResultado;
+    const totalAbs = Math.abs(d.totalVolume) + Math.abs(d.totalPreco) + Math.abs(d.totalMix);
+    if(totalAbs > 0){
+      const pctV = (Math.abs(d.totalVolume) / totalAbs * 100);
+      const pctP = (Math.abs(d.totalPreco) / totalAbs * 100);
+      const pctM = (Math.abs(d.totalMix) / totalAbs * 100);
+      let driver = '';
+      if(pctV > pctP && pctV > pctM) driver = `principalmente por volume (${pctV.toFixed(0)}%)`;
+      else if(pctP > pctM) driver = `principalmente por preço (${pctP.toFixed(0)}%)`;
+      else driver = `principalmente por mix (${pctM.toFixed(0)}%)`;
+      partes.push(`Decomposição mostra que o movimento veio ${driver}.`);
+    }
+  }
+
+  // Maior contribuidor positivo e negativo (em BRL para consistência)
+  const periodoAtualSet = new Set(per.periodoAtual.map(p => `${p.ano}-${p.mes}`));
+  const periodoCompSet = new Set(per.periodoComp.map(p => `${p.ano}-${p.mes}`));
+  const aggCli = {};
+  for(const r of base){
+    const k = `${r[COLS.ANO]}-${r[COLS.MES_NUM]}`;
+    const cli = r[COLS.CLIENTE];
+    if(!aggCli[cli]) aggCli[cli] = {atual:0, comp:0};
+    const v = +r[COLS.VALOR_BRL] || 0;  // sempre BRL no story executivo
+    if(periodoAtualSet.has(k)) aggCli[cli].atual += v;
+    if(periodoCompSet.has(k)) aggCli[cli].comp += v;
+  }
+  const linhasCli = Object.keys(aggCli).map(c => ({nome:c, dAbs:aggCli[c].atual - aggCli[c].comp}));
+  const topPos = linhasCli.filter(r => r.dAbs > 0).sort((a,b) => b.dAbs - a.dAbs)[0];
+  const topNeg = linhasCli.filter(r => r.dAbs < 0).sort((a,b) => a.dAbs - b.dAbs)[0];
+
+  if(topPos) partes.push(`Maior alavanca: ${topPos.nome} (+${fmt(topPos.dAbs)}).`);
+  if(topNeg) partes.push(`Maior ofensor: ${topNeg.nome} (-${fmt(Math.abs(topNeg.dAbs))}).`);
+
+  return partes;
+}
+
+
 async function exportPPTX(){
   if(typeof PptxGenJS === 'undefined'){
     alert('Biblioteca de PowerPoint não carregou. Verifique sua conexão.');
@@ -4934,6 +6493,7 @@ async function exportPPTX(){
       }
       let atual=0, comp=0, momAtual=0, momAnterior=0, ytd=0, ytdAnt=0;
       for(const r of rawDataSellout){
+      if(!selloutCanalOk(r)) continue;
         if(franquiasSetSO && !franquiasSetSO.has(String(r.FRANQUIA))) continue;
         if(tipoSetSO && !tipoSetSO.has(r.TIPO_CLIENTE)) continue;
         if(produtoSetSO && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSetSO))) continue;
@@ -5199,6 +6759,7 @@ async function exportPPTX(){
       const periodoCompSetSO = new Set(periodoSelloutCompPpt.map(p => `${p.ano}-${p.mes}`));
 
       const dadosSelloutFiltrados = rawDataSellout.filter(r => {
+      if(!selloutCanalOk(r)) return false;
         if(franquiasSetR && !franquiasSetR.has(String(r.FRANQUIA))) return false;
         if(tipoSetR && !tipoSetR.has(r.TIPO_CLIENTE)) return false;
         if(produtoSetR && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSetR))) return false;
@@ -5365,6 +6926,7 @@ async function exportPPTX(){
       // Agregação SO
       const soProd = {}, soRede = {}, soFr = {};
       for(const r of rawDataSellout){
+      if(!selloutCanalOk(r)) continue;
         if(franquiasSetC && !franquiasSetC.has(String(r.FRANQUIA))) continue;
         if(tipoSetC && !tipoSetC.has(r.TIPO_CLIENTE)) continue;
         if(produtoSetC && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSetC))) continue;
@@ -5510,6 +7072,196 @@ async function exportPPTX(){
     });
 
     // ============================================================
+    // SLIDE - DECOMPOSIÇÃO DE CRESCIMENTO (só se métrica = BRL/USD)
+    // ============================================================
+    if(metricaAtual !== 'UNID' && window.__decompResultado){
+      const sDecomp = pptx.addSlide();
+      addHeader(sDecomp, `📊 Decomposição de Crescimento · ${mLabel}`);
+      const d = window.__decompResultado;
+
+      // Resumo grande no topo
+      const corDelta = d.deltaTotal >= 0 ? VERDE : VERMELHO;
+      const setaDelta = d.deltaTotal >= 0 ? '▲' : '▼';
+      const fmtMoeda = (v) => (v >= 0 ? '+' : '-') + 'R$ ' + Math.abs(v).toLocaleString('pt-BR', {maximumFractionDigits:0});
+
+      sDecomp.addShape(pptx.ShapeType.rect, {
+        x:0.5, y:0.95, w:12.3, h:1.3, fill:{color:'EBF4FB'}, line:{color:'003595', width:1}
+      });
+      sDecomp.addText([
+        {text:'Δ TOTAL: ', options:{fontSize:14, bold:true, color:'003595'}},
+        {text:`${setaDelta} ${fmtMoeda(d.deltaTotal)}`, options:{fontSize:24, bold:true, color: corDelta}},
+        {text:`  (${d.pctTotal >= 0 ? '+' : ''}${d.pctTotal.toFixed(1)}%)`, options:{fontSize:16, bold:true, color: corDelta}}
+      ], {
+        x:0.7, y:1.05, w:12, h:0.55, valign:'top'
+      });
+      const totalAbs = Math.abs(d.totalVolume) + Math.abs(d.totalPreco) + Math.abs(d.totalMix);
+      const pctV = totalAbs > 0 ? (Math.abs(d.totalVolume) / totalAbs * 100) : 0;
+      const pctP = totalAbs > 0 ? (Math.abs(d.totalPreco) / totalAbs * 100) : 0;
+      const pctM = totalAbs > 0 ? (Math.abs(d.totalMix) / totalAbs * 100) : 0;
+      const maiorEfeito = pctV >= pctP && pctV >= pctM ? 'VOLUME' : (pctP >= pctM ? 'PREÇO' : 'MIX');
+      sDecomp.addText(`Principal driver: ${maiorEfeito} (${maiorEfeito === 'VOLUME' ? pctV.toFixed(0) : (maiorEfeito === 'PREÇO' ? pctP.toFixed(0) : pctM.toFixed(0))}% do efeito total)`, {
+        x:0.7, y:1.65, w:12, h:0.5, fontSize:11, italic:true, color:'1E3A5F', fontFace:'Open Sans'
+      });
+
+      // 3 caixas com decomposição
+      const yBase = 2.5;
+      const wBox = 4.05, hBox = 1.5;
+      const corV = d.totalVolume >= 0 ? '10B981' : 'EF4444';
+      const corP = d.totalPreco >= 0 ? '3B82F6' : 'EF4444';
+      const corM = d.totalMix >= 0 ? 'A855F7' : 'EF4444';
+
+      // Volume
+      sDecomp.addShape(pptx.ShapeType.rect, {x:0.5, y:yBase, w:wBox, h:hBox, fill:{color:'FFFFFF'}, line:{color:corV, width:2}});
+      sDecomp.addText('▲ VOLUME', {x:0.5, y:yBase+0.1, w:wBox, h:0.3, fontSize:12, bold:true, color:corV, align:'center', fontFace:'Open Sans'});
+      sDecomp.addText(fmtMoeda(d.totalVolume), {x:0.5, y:yBase+0.4, w:wBox, h:0.5, fontSize:22, bold:true, color:corV, align:'center', fontFace:'Open Sans'});
+      sDecomp.addText(`${pctV.toFixed(0)}% do efeito`, {x:0.5, y:yBase+0.95, w:wBox, h:0.25, fontSize:10, color:'64748B', align:'center'});
+      sDecomp.addText('Mais (ou menos) unidades vendidas', {x:0.5, y:yBase+1.2, w:wBox, h:0.25, fontSize:9, italic:true, color:'94A3B8', align:'center'});
+
+      // Preço
+      sDecomp.addShape(pptx.ShapeType.rect, {x:4.65, y:yBase, w:wBox, h:hBox, fill:{color:'FFFFFF'}, line:{color:corP, width:2}});
+      sDecomp.addText('▲ PREÇO', {x:4.65, y:yBase+0.1, w:wBox, h:0.3, fontSize:12, bold:true, color:corP, align:'center', fontFace:'Open Sans'});
+      sDecomp.addText(fmtMoeda(d.totalPreco), {x:4.65, y:yBase+0.4, w:wBox, h:0.5, fontSize:22, bold:true, color:corP, align:'center', fontFace:'Open Sans'});
+      sDecomp.addText(`${pctP.toFixed(0)}% do efeito`, {x:4.65, y:yBase+0.95, w:wBox, h:0.25, fontSize:10, color:'64748B', align:'center'});
+      sDecomp.addText('Aumento (ou queda) de preço médio', {x:4.65, y:yBase+1.2, w:wBox, h:0.25, fontSize:9, italic:true, color:'94A3B8', align:'center'});
+
+      // Mix
+      sDecomp.addShape(pptx.ShapeType.rect, {x:8.8, y:yBase, w:wBox, h:hBox, fill:{color:'FFFFFF'}, line:{color:corM, width:2}});
+      sDecomp.addText('◆ MIX', {x:8.8, y:yBase+0.1, w:wBox, h:0.3, fontSize:12, bold:true, color:corM, align:'center', fontFace:'Open Sans'});
+      sDecomp.addText(fmtMoeda(d.totalMix), {x:8.8, y:yBase+0.4, w:wBox, h:0.5, fontSize:22, bold:true, color:corM, align:'center', fontFace:'Open Sans'});
+      sDecomp.addText(`${pctM.toFixed(0)}% do efeito`, {x:8.8, y:yBase+0.95, w:wBox, h:0.25, fontSize:10, color:'64748B', align:'center'});
+      sDecomp.addText('Mudança no peso de cada produto', {x:8.8, y:yBase+1.2, w:wBox, h:0.25, fontSize:9, italic:true, color:'94A3B8', align:'center'});
+
+      // Tabela top 10 produtos
+      if(d.topProdutos && d.topProdutos.length > 0){
+        const yTabela = 4.25;
+        sDecomp.addText('📋 Top 10 produtos por impacto absoluto', {
+          x:0.5, y:yTabela, w:12, h:0.3, fontSize:11, bold:true, color:'003595', fontFace:'Open Sans'
+        });
+        const headers = [
+          {text:'Produto', options:{bold:true, color:BRANCO, fill:{color:'003595'}, fontSize:9}},
+          {text:'Receita', options:{bold:true, color:BRANCO, fill:{color:'003595'}, align:'right', fontSize:9}},
+          {text:'Δ Total', options:{bold:true, color:BRANCO, fill:{color:'003595'}, align:'right', fontSize:9}},
+          {text:'▲ Volume', options:{bold:true, color:BRANCO, fill:{color:'003595'}, align:'right', fontSize:9}},
+          {text:'▲ Preço', options:{bold:true, color:BRANCO, fill:{color:'003595'}, align:'right', fontSize:9}},
+          {text:'◆ Mix', options:{bold:true, color:BRANCO, fill:{color:'003595'}, align:'right', fontSize:9}},
+          {text:'Δ Preço Médio', options:{bold:true, color:BRANCO, fill:{color:'003595'}, align:'right', fontSize:9}}
+        ];
+        const rows = [headers];
+        d.topProdutos.slice(0, 10).forEach(p => {
+          const dPctPreco = p.precoMedioComp > 0 ? ((p.precoMedioAtual - p.precoMedioComp) / p.precoMedioComp * 100) : 0;
+          rows.push([
+            {text:p.nome, options:{bold:true, fontSize:8.5}},
+            {text:fmt(p.atual), options:{align:'right', fontSize:8.5}},
+            {text:fmtMoeda(p.delta), options:{align:'right', bold:true, color: p.delta >= 0 ? VERDE : VERMELHO, fontSize:8.5}},
+            {text:fmtMoeda(p.volume), options:{align:'right', color: p.volume >= 0 ? '10B981' : 'EF4444', fontSize:8.5}},
+            {text:fmtMoeda(p.preco), options:{align:'right', color: p.preco >= 0 ? '3B82F6' : 'EF4444', fontSize:8.5}},
+            {text:fmtMoeda(p.mix), options:{align:'right', color: p.mix >= 0 ? 'A855F7' : 'EF4444', fontSize:8.5}},
+            {text: p.precoMedioComp > 0 ? `${dPctPreco >= 0 ? '+' : ''}${dPctPreco.toFixed(1)}%` : '—', options:{align:'right', fontSize:8.5, color:'64748B'}}
+          ]);
+        });
+        sDecomp.addTable(rows, {
+          x:0.5, y:yTabela+0.35, w:12.3, h:2.8,
+          colW:[3.0, 1.5, 1.6, 1.5, 1.5, 1.4, 1.8],
+          fontSize:8.5, border:{type:'solid', pt:0.5, color:'E5E7EB'}
+        });
+      }
+    }
+
+    // ============================================================
+    // SLIDE - PLANO DE AÇÃO (3 categorias: Crítico / Atenção / Oportunidade)
+    // ============================================================
+    if(window.__planoAcaoResultado){
+      const pa = window.__planoAcaoResultado;
+      const totalItens = pa.criticos.length + pa.atencao.length + pa.oportunidades.length;
+
+      if(totalItens > 0){
+        const sPlano = pptx.addSlide();
+        addHeader(sPlano, `🎯 Plano de Ação · Prioridades`);
+
+        // Resumo no topo: 3 caixas
+        const yResumo = 0.95;
+        const totalCritico = pa.criticos.reduce((s, a) => s + a.impactoSinal, 0);
+        const totalAtencao = pa.atencao.reduce((s, a) => s + a.impactoSinal, 0);
+        const totalOpor = pa.oportunidades.reduce((s, a) => s + a.impactoSinal, 0);
+
+        // Crítico
+        sPlano.addShape(pptx.ShapeType.rect, {x:0.5, y:yResumo, w:4.2, h:0.7, fill:{color:'FEF2F2'}, line:{color:'DC2626', width:2}});
+        sPlano.addText([
+          {text:'🔴 CRÍTICO  ', options:{fontSize:11, bold:true, color:'7F1D1D'}},
+          {text:`${pa.criticos.length} ${pa.criticos.length === 1 ? 'item' : 'itens'}`, options:{fontSize:14, bold:true, color:'DC2626'}}
+        ], {x:0.65, y:yResumo+0.05, w:4.0, h:0.3});
+        sPlano.addText(`Impacto: ${fmt(Math.abs(totalCritico))}`, {
+          x:0.65, y:yResumo+0.38, w:4, h:0.3, fontSize:10, color:'991B1B'
+        });
+
+        // Atenção
+        sPlano.addShape(pptx.ShapeType.rect, {x:4.85, y:yResumo, w:4.2, h:0.7, fill:{color:'FFFBEB'}, line:{color:'F59E0B', width:2}});
+        sPlano.addText([
+          {text:'🟠 ATENÇÃO  ', options:{fontSize:11, bold:true, color:'92400E'}},
+          {text:`${pa.atencao.length} ${pa.atencao.length === 1 ? 'item' : 'itens'}`, options:{fontSize:14, bold:true, color:'F59E0B'}}
+        ], {x:5.0, y:yResumo+0.05, w:4.0, h:0.3});
+        sPlano.addText(`Impacto: ${fmt(Math.abs(totalAtencao))}`, {
+          x:5.0, y:yResumo+0.38, w:4, h:0.3, fontSize:10, color:'92400E'
+        });
+
+        // Oportunidade
+        sPlano.addShape(pptx.ShapeType.rect, {x:9.2, y:yResumo, w:4.1, h:0.7, fill:{color:'ECFDF5'}, line:{color:'10B981', width:2}});
+        sPlano.addText([
+          {text:'🟢 OPORTUNIDADE  ', options:{fontSize:11, bold:true, color:'065F46'}},
+          {text:`${pa.oportunidades.length} ${pa.oportunidades.length === 1 ? 'item' : 'itens'}`, options:{fontSize:14, bold:true, color:'10B981'}}
+        ], {x:9.35, y:yResumo+0.05, w:4.0, h:0.3});
+        sPlano.addText(`Potencial: ${fmt(Math.abs(totalOpor))}`, {
+          x:9.35, y:yResumo+0.38, w:4, h:0.3, fontSize:10, color:'065F46'
+        });
+
+        // Tabela com top ações (todas categorias misturadas, ordenadas por score)
+        const todasOrdenadas = [...pa.criticos, ...pa.atencao, ...pa.oportunidades]
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 8); // até 8 ações no slide
+
+        const yTabela = 1.85;
+        const headerRow = [
+          {text:'Cat.', options:{bold:true, color:'FFFFFF', fill:{color:'003595'}, fontSize:9, align:'center'}},
+          {text:'Tipo', options:{bold:true, color:'FFFFFF', fill:{color:'003595'}, fontSize:9}},
+          {text:'Cliente / Produto', options:{bold:true, color:'FFFFFF', fill:{color:'003595'}, fontSize:9}},
+          {text:'Impacto', options:{bold:true, color:'FFFFFF', fill:{color:'003595'}, fontSize:9, align:'right'}},
+          {text:'Δ %', options:{bold:true, color:'FFFFFF', fill:{color:'003595'}, fontSize:9, align:'right'}},
+          {text:'Diagnóstico + Ação Sugerida', options:{bold:true, color:'FFFFFF', fill:{color:'003595'}, fontSize:9}}
+        ];
+        const rows = [headerRow];
+
+        todasOrdenadas.forEach(a => {
+          const catIcon = a.categoria === 'critico' ? '🔴' : (a.categoria === 'atencao' ? '🟠' : '🟢');
+          const tipoLabel = a.tipo === 'cliente' ? 'Cliente' : 'Produto';
+          const sinalImpacto = a.impactoSinal >= 0 ? '+' : '-';
+          const corImpacto = a.impactoSinal >= 0 ? '059669' : 'DC2626';
+          const textoCombinado = `${a.diagnostico}\n💡 ${a.acao}`;
+
+          rows.push([
+            {text: catIcon, options:{align:'center', fontSize:11}},
+            {text: tipoLabel, options:{fontSize:8.5, color:'64748B'}},
+            {text: a.nome, options:{bold:true, fontSize:9, color:'1E3A5F'}},
+            {text: `${sinalImpacto}${fmt(Math.abs(a.impactoSinal))}`, options:{align:'right', bold:true, color: corImpacto, fontSize:9.5}},
+            {text: `${a.dPct >= 0 ? '+' : ''}${a.dPct.toFixed(1)}%`, options:{align:'right', color: corImpacto, fontSize:8.5}},
+            {text: textoCombinado, options:{fontSize:7.5, color:'334155', valign:'middle'}}
+          ]);
+        });
+
+        sPlano.addTable(rows, {
+          x:0.5, y:yTabela, w:12.8,
+          colW:[0.5, 0.85, 2.2, 1.4, 0.85, 7.0],
+          fontSize:8.5, border:{type:'solid', pt:0.5, color:'E5E7EB'},
+          rowH: 0.6
+        });
+
+        // Footnote
+        sPlano.addText('Score: 60% impacto + 30% urgência + 10% recuperabilidade. Diagnóstico baseado em tendência (slope 6 meses), gap vs YA, cruzamento SI×SO e benchmark de franquia.', {
+          x:0.5, y:7.0, w:12.8, h:0.3, fontSize:8.5, italic:true, color:'94A3B8', fontFace:'Open Sans'
+        });
+      }
+    }
+
+    // ============================================================
     // SLIDE 3.5 - EVOLUÇÃO MENSAL — isolado (espaço total)
     // ============================================================
     const sEvo = pptx.addSlide();
@@ -5570,6 +7322,7 @@ async function exportPPTX(){
         const setCompSOPpt = new Set(periodoSOCompPpt.map(p => `${p.ano}-${p.mes}`));
 
         for(const r of rawDataSellout){
+      if(!selloutCanalOk(r)) continue;
           if(franquiasSetPpt && !franquiasSetPpt.has(String(r.FRANQUIA))) continue;
           if(tipoSetPpt && !tipoSetPpt.has(r.TIPO_CLIENTE)) continue;
           const k = `${r.ANO}-${r.MES}`;
@@ -5976,6 +7729,7 @@ async function exportPPTX(){
       const totaisCliSO = {};
       const cruzamentoSO = {}; // [produto][rede] = {atual, comp}
       for(const r of rawDataSellout){
+      if(!selloutCanalOk(r)) continue;
         if(franquiasSetSO && !franquiasSetSO.has(String(r.FRANQUIA))) continue;
         if(tipoSetSO && !tipoSetSO.has(r.TIPO_CLIENTE)) continue;
         if(produtoSetSO && !produtoBateFiltro(r.PRODUTO, construirSetProdutosNorm(produtoSetSO))) continue;
@@ -6435,6 +8189,18 @@ mapTargets = {
 const selloutDemo = gerarSelloutExemplo();
 rawDataSellout = selloutDemo.dados;
 selloutUltimoPeriodo = selloutDemo.ultimoPeriodo;
+// Mapeamento cliente -> tipo (sell-in: clientes do live são REDE/INDEPENDENTE/DISTRIBUIDOR)
+window.__clienteTipoMap = {
+  'PROFARMA DIST': 'DISTRIBUIDOR',
+  'SANTA CRUZ FARMA': 'DISTRIBUIDOR',
+  'GRUPO RAIA DROGASIL': '2.REDE',
+  'PAGUE MENOS': '2.REDE',
+  'DPSP DROGARIAS': '2.REDE',
+  'PANVEL': '2.REDE',
+  'DROGARIA NISSEI': '2.REDE',
+  'INDEPENDENTE SP': '1.INDEPENDENTE',
+  'INDEPENDENTE NE': '1.INDEPENDENTE'
+};
 document.getElementById('statusText').textContent = `${rawData.length.toLocaleString('pt-BR')} registros sell-in + ${rawDataSellout.length.toLocaleString('pt-BR')} sell-out + ${Object.keys(mapTargets).length} targets FOCO (demo)`;
 inicializarFiltros();
 atualizarLabelsMetrica();
